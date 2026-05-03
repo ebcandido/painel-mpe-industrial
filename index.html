@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MPE Industrial - v4.5 Full</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0b0e14;
+            --panel: #1c2128;
+            --panel-border: #30363d;
+            --accent: #58a6ff;
+            --pump-on: #2ea043;
+            --pump-off: #f85149;
+            --pipe: #444c56;
+            --water: #388bfd;
+            --oil: #d29922;
+            --gas: #8b949e;
+            --emergency: #ff3333;
+            --text-main: #adbac7;
+        }
+
+        * { box-sizing: border-box; transition: background 0.3s, border 0.3s, box-shadow 0.3s; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* HEADER */
+        .header {
+            padding: 15px;
+            text-align: center;
+            width: 100%;
+            background: var(--panel);
+            border-bottom: 2px solid var(--panel-border);
+            position: sticky;
+            top: 0;
+            z-index: 2000;
+        }
+
+        .header h2 { font-size: 1.2rem; margin: 0; color: #fff; letter-spacing: 1px; }
+
+        /* SCADA CANVAS */
+        .scada-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            padding: 20px 10px;
+            display: flex;
+            justify-content: flex-start;
+            background: #010409;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .scada-canvas {
+            position: relative;
+            width: 1100px; 
+            height: 550px;
+            background: #0d1117;
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            flex-shrink: 0;
+            background-image: 
+                linear-gradient(rgba(48, 54, 61, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(48, 54, 61, 0.1) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+
+        #ping-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(13, 17, 23, 0.92);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            border-radius: 10px;
+        }
+
+        /* PIPES & FLOW */
+        .pipes-layer { position: absolute; width: 100%; height: 100%; z-index: 1; }
+        .p-base { fill: none; stroke: var(--pipe); stroke-width: 10; stroke-linejoin: round; stroke-linecap: round; }
+        .f-line { fill: none; stroke-width: 5; stroke-dasharray: 10, 15; animation: flow 1s linear infinite; display: none; }
+        @keyframes flow { from { stroke-dashoffset: 25; } to { stroke-dashoffset: 0; } }
+
+        /* DEVICES */
+        .device {
+            position: absolute;
+            background: var(--panel);
+            border: 2px solid #444;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            font-size: 11px;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .pump { width: 60px; height: 60px; border-radius: 50%; }
+        .pump.on { border-color: var(--pump-on); box-shadow: 0 0 20px var(--pump-on); background: #1b4332; color: #fff; }
+        .pump.off { border-color: var(--pump-off); }
+
+        .tank { width: 90px; height: 130px; border-radius: 6px; overflow: hidden; }
+        .silo { border-bottom-left-radius: 30px; border-bottom-right-radius: 30px; }
+        .tank-emerg { border-color: var(--emergency) !important; box-shadow: 0 0 20px var(--emergency); animation: emerg-blink 0.8s infinite; }
+        @keyframes emerg-blink { 50% { border-color: transparent; } }
+
+        .level {
+            position: absolute;
+            bottom: 0; width: 100%;
+            background: linear-gradient(to top, var(--water), #58a6ff);
+            height: 20%; transition: height 1s ease-in-out;
+            border-top: 2px solid #fff;
+            z-index: -1;
+            opacity: 0.8;
+        }
+
+        .label-tag {
+            background: #000;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 9px;
+            margin-bottom: 3px;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+        }
+
+        /* DASHBOARD CARDS */
+        .dashboard {
+            width: 100%;
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            padding: 20px;
+            margin-bottom: 40px;
+        }
+
+        .card { 
+            background: var(--panel); 
+            padding: 15px; 
+            border-radius: 12px; 
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .card small { color: var(--accent); font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 10px; }
+
+        .btn { 
+            width: 100%; padding: 16px; border: none; border-radius: 8px; 
+            font-weight: bold; color: white; cursor: pointer; margin-top: 10px; font-size: 14px;
+        }
+        .btn-on { background: var(--pump-on); }
+        .btn-off { background: var(--pump-off); }
+        .btn:active { opacity: 0.8; transform: translateY(1px); }
+
+        .alarm-item {
+            display: flex; align-items: center; padding: 10px; margin-bottom: 6px;
+            background: #0d1117; border-radius: 6px; border-left: 4px solid #30363d;
+            font-size: 12px; color: #8b949e;
+        }
+        .alarm-active { border-left-color: var(--pump-off); color: #ff7b72; font-weight: bold; animation: blink 1s infinite; }
+        .alarm-crit { border-left-color: #ff0000; background: #2a0a0a; color: #ff0000; }
+        @keyframes blink { 50% { opacity: 0.7; } }
+
+        .status-badge { 
+            padding: 12px; border-radius: 8px; font-size: 14px; 
+            font-weight: bold; margin-top: 10px; text-align: center;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        @media (min-width: 1150px) {
+            .scada-wrapper { justify-content: center; overflow: hidden; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2>SISTEMA MPE INDUSTRIAL v4.5</h2>
+    <div id="mqtt-status" style="font-size: 12px; color:var(--pump-off); font-weight: bold; margin-top: 5px;">MQTT: DESCONECTADO</div>
+</div>
+
+<div class="scada-wrapper">
+    <div class="scada-canvas" id="main-canvas">
+        
+        <div id="ping-overlay">
+            <h2 style="color: var(--pump-off);">⚠️ CONEXÃO PERDIDA</h2>
+            <p style="color: #8b949e; font-size: 14px;">Aguardando sinal do hardware...</p>
+        </div>
+
+        <svg class="pipes-layer">
+            <!-- Caminhos originais mantidos -->
+            <path class="p-base" d="M 30 430 L 100 430 L 100 320 L 150 320" />
+            <path id="f-succao" class="f-line" stroke="var(--water)" d="M 30 430 L 100 430 L 100 320 L 150 320" />
+            <path class="p-base" d="M 195 130 L 195 280" />
+            <path id="f-vacuo" class="f-line" stroke="var(--gas)" d="M 195 130 L 195 280" />
+            <path class="p-base" d="M 195 410 L 195 440 L 260 440" />
+            <path id="f-bc1-in" class="f-line" stroke="var(--water)" d="M 195 410 L 195 440 L 260 440" />
+            <path class="p-base" d="M 320 440 L 450 440 L 450 140 L 500 140" />
+            <path id="f-bc1-out" class="f-line" stroke="var(--water)" d="M 320 440 L 450 440 L 450 140 L 500 140" />
+            <path class="p-base" d="M 550 230 L 550 300 L 640 300" />
+            <path id="f-sao-in" class="f-line" stroke="var(--water)" d="M 550 230 L 550 300 L 640 300" />
+            <path class="p-base" d="M 720 380 L 720 480 L 780 480" />
+            <path id="f-sao-agua" class="f-line" stroke="var(--water)" d="M 720 380 L 720 480 L 780 480" />
+            <path class="p-base" d="M 880 480 L 920 480" />
+            <path id="f-bc2-in" class="f-line" stroke="var(--water)" d="M 880 480 L 920 480" />
+            <path class="p-base" d="M 980 480 L 1050 480 L 1050 430" />
+            <path id="f-bc2-out" class="f-line" stroke="var(--water)" d="M 980 480 L 1050 480 L 1050 430" />
+        </svg>
+
+        <!-- Elementos Scada -->
+        <div id="dev-bvr" class="device pump off" style="left: 165px; top: 70px;"><span class="label-tag">BVR</span>BOMBA</div>
+        <div id="tank-tk01" class="device tank silo" style="left: 150px; top: 280px;"><div id="lvl-vacuo" class="level"></div><span class="label-tag">TK-01</span>VÁCUO</div>
+        <div id="dev-bc1" class="device pump off" style="left: 260px; top: 410px;"><span class="label-tag">BC-01</span>HELIC.</div>
+        <div class="device tank" style="left: 500px; top: 100px;"><div id="lvl-sup" class="level" style="height: 40%;"></div><span class="label-tag">TQ-SUP</span>SUP.</div>
+        <div class="device" style="left: 640px; top: 270px; width: 140px; height: 110px; background: linear-gradient(to bottom, #d29922 20%, #1f6feb 80%); border-radius: 4px;"><span class="label-tag">S.A.O.</span>S.A.O</div>
+        <div id="dev-oleo" class="device" style="left: 830px; top: 300px; width: 70px; height: 60px; border-radius: 4px;"><span class="label-tag" style="color:var(--oil)">ÓLEO</span>DESCARTE</div>
+        <div id="tank-tk02" class="device tank" style="left: 780px; top: 430px; width: 100px; height: 100px;"><div id="lvl-agua" class="level"></div><span class="label-tag">TK-02</span>ÁGUA</div>
+        <div id="dev-bc2" class="device pump off" style="left: 920px; top: 450px;"><span class="label-tag">BC-02</span>CENTRIF.</div>
+        <div class="device tank" style="left: 1000px; top: 300px; width: 100px; height: 130px; background: #2d333b;"><span class="label-tag">F-01</span>FILTRO</div>
+    </div>
+</div>
+
+<div class="dashboard">
+    <div class="card">
+        <small>COMANDOS</small>
+        <button class="btn btn-on" onclick="enviarComando('start', '1')">INICIAR SISTEMA</button>
+        <button class="btn btn-off" onclick="enviarComando('reset', '1')">RESET GERAL</button>
+        <div id="status-badge" class="status-badge" style="background: #30363d; margin-top: 15px;">AGUARDANDO...</div>
+    </div>
+
+    <div class="card">
+        <small>ALARMES OPERACIONAIS</small>
+        <div class="alarm-list">
+            <div id="alm-critico" class="alarm-item">⚠ FALHA CRÍTICA</div>
+            <div id="alm-v-alto" class="alarm-item">⚠ NÍVEL ALTO TK-01</div>
+            <div id="alm-r-alto" class="alarm-item">⚠ NÍVEL ALTO TK-02</div>
+            <div id="alm-oleo" class="alarm-item">⚠ DESCARTE ÓLEO CHEIO</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <small>EMERGÊNCIA / ENERGIA</small>
+        <div class="alarm-list">
+            <div id="alm-v-emerg" class="alarm-item">⛔ TK-01 EMERGÊNCIA</div>
+            <div id="alm-r-emerg" class="alarm-item">⛔ TK-02 EMERGÊNCIA</div>
+            <div id="alm-energia" class="alarm-item">⚠ FALHA DE ENERGIA</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // CONFIGURAÇÕES ORIGINAIS
+    const BROKER = "703f5ff76b174323a13b99c0940fca41.s1.eu.hivemq.cloud";
+    const PORT = 8884;
+    const USER = "ebcandido";
+    const PASS = "Elson@2015";
+    const TOPICO_BASE = "planta/mpe/";
+
+    let watchdogTimer = null;
+    const TIMEOUT_PULSE = 65000;
+
+    const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "Web_MPE_" + Math.random().toString(16).substr(2, 5));
+
+    function resetPingTimer() {
+        document.getElementById('ping-overlay').style.display = 'none';
+        clearTimeout(watchdogTimer);
+        watchdogTimer = setTimeout(triggerMachineOffline, TIMEOUT_PULSE);
+    }
+
+    function triggerMachineOffline() {
+        document.getElementById('ping-overlay').style.display = 'flex';
+        document.getElementById('status-badge').innerText = "MÁQUINA OFFLINE";
+        document.getElementById('status-badge').style.background = "#30363d";
+        document.querySelectorAll('.f-line').forEach(f => f.style.display = 'none');
+    }
+
+    client.onConnectionLost = () => {
+        document.getElementById('mqtt-status').innerText = "MQTT: DESCONECTADO";
+        document.getElementById('mqtt-status').style.color = "var(--pump-off)";
+        triggerMachineOffline();
+        setTimeout(conectar, 5000);
+    };
+
+    client.onMessageArrived = (msg) => {
+        resetPingTimer(); 
+        const tag = msg.destinationName.replace(TOPICO_BASE, "");
+        processarDados(tag, msg.payloadString);
+    };
+
+    function conectar() {
+        client.connect({
+            userName: USER, password: PASS, useSSL: true,
+            onSuccess: () => {
+                document.getElementById('mqtt-status').innerText = "MQTT: CONECTADO";
+                document.getElementById('mqtt-status').style.color = "var(--pump-on)";
+                client.subscribe(TOPICO_BASE + "#");
+            }
+        });
+    }
+
+    // LÓGICA DE PROCESSAMENTO ORIGINAL
+    function processarDados(tag, valor) {
+        const ativo = (valor === "1");
+        
+        switch(tag) {
+            case "bomba_radial": atualizarBomba('bvr', ativo, ['f-vacuo']); break;
+            case "bomba_helicoidal": atualizarBomba('bc1', ativo, ['f-bc1-in', 'f-bc1-out']); break;
+            case "bomba_centrifuga": atualizarBomba('bc2', ativo, ['f-bc2-in', 'f-bc2-out', 'f-sao-in', 'f-sao-agua']); break;
+            
+            case "nivel_alto": 
+                document.getElementById('lvl-vacuo').style.height = ativo ? "85%" : "25%";
+                document.getElementById('alm-v-alto').classList.toggle('alarm-active', ativo);
+                break;
+            
+            case "nivel_alto_res": 
+                document.getElementById('lvl-agua').style.height = ativo ? "85%" : "25%";
+                document.getElementById('alm-r-alto').classList.toggle('alarm-active', ativo);
+                break;
+
+            case "nivel_emerg": 
+                document.getElementById('alm-v-emerg').classList.toggle('alarm-active', ativo);
+                document.getElementById('alm-v-emerg').classList.toggle('alarm-crit', ativo);
+                document.getElementById('tank-tk01').classList.toggle('tank-emerg', ativo);
+                break;
+
+            case "nivel_emerg_res": 
+                document.getElementById('alm-r-emerg').classList.toggle('alarm-active', ativo);
+                document.getElementById('alm-r-emerg').classList.toggle('alarm-crit', ativo);
+                document.getElementById('tank-tk02').classList.toggle('tank-emerg', ativo);
+                break;
+
+            case "oleo_cheio": 
+                document.getElementById('dev-oleo').style.background = ativo ? "var(--pump-off)" : "var(--panel)";
+                document.getElementById('alm-oleo').classList.toggle('alarm-active', ativo);
+                break;
+
+            case "energia":
+                document.getElementById('alm-energia').classList.toggle('alarm-active', ativo);
+                document.getElementById('alm-energia').classList.toggle('alarm-crit', ativo);
+                break;
+
+            case "sistema": 
+                const badge = document.getElementById('status-badge');
+                badge.innerText = ativo ? "EM OPERAÇÃO" : "STANDBY";
+                badge.style.background = ativo ? "var(--pump-on)" : "#30363d";
+                break;
+
+            case "alarme": 
+                document.getElementById('alm-critico').classList.toggle('alarm-active', ativo); 
+                break;
+        }
+    }
+
+    function atualizarBomba(id, ligar, fluxos) {
+        const dev = document.getElementById(`dev-${id}`);
+        if(!dev) return;
+        if(ligar) {
+            dev.classList.replace('off', 'on');
+            fluxos.forEach(f => {
+                const el = document.getElementById(f);
+                if(el) el.style.display = 'block';
+            });
+        } else {
+            dev.classList.replace('on', 'off');
+            fluxos.forEach(f => {
+                const el = document.getElementById(f);
+                if(el) el.style.display = 'none';
+            });
+        }
+    }
+
+    function enviarComando(cmd, val) {
+        const message = new Paho.MQTT.Message(val);
+        message.destinationName = TOPICO_BASE + "comando/" + cmd;
+        client.send(message);
+    }
+
+    // AUTO SCALE PARA MOBILE
+    function autoScale() {
+        const canvas = document.getElementById('main-canvas');
+        const wrapper = document.querySelector('.scada-wrapper');
+        const availableWidth = wrapper.offsetWidth;
+        
+        if (availableWidth < 1100) {
+            const scale = (availableWidth - 20) / 1100;
+            canvas.style.transform = `scale(${scale})`;
+            canvas.style.transformOrigin = 'top left';
+            wrapper.style.height = (550 * scale + 20) + 'px';
+        } else {
+            canvas.style.transform = `none`;
+            wrapper.style.height = '570px';
+        }
+    }
+
+    window.addEventListener('resize', autoScale);
+    window.addEventListener('load', () => {
+        conectar();
+        autoScale();
+        triggerMachineOffline();
+    });
+</script>
+</body>
+</html>
