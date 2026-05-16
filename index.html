@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MPE Industrial - v7.1 Sensacional</title>
+    <title>MPE Industrial - v7.5 Audit Reset</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -104,21 +104,23 @@
         
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
-        /* INDICADORES DE TEMPO */
         .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 15px; }
-        .stat-box { background: #0d1117; padding: 20px 10px; border-radius: 10px; border: 1px solid var(--panel-border); text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
-        .stat-val { display: block; font-size: 24px; font-family: 'Courier New', Courier, monospace; font-weight: bold; color: #ffffff; letter-spacing: 2px; margin-bottom: 5px; }
-        .stat-label { font-size: 11px; color: var(--accent); text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
+        .stat-box { background: #0d1117; padding: 20px 10px; border-radius: 10px; border: 1px solid var(--panel-border); text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .stat-val { display: block; font-size: 24px; font-family: 'Courier New', Courier, monospace; font-weight: bold; color: #ffffff; letter-spacing: 2px; }
+        .stat-label { font-size: 11px; color: var(--accent); text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin-top: 5px; }
 
-        .btn-reset-hours { background: #2d333b; border: 1px solid #444c56; color: #adbac7; padding: 12px; font-size: 11px; font-weight: bold; letter-spacing: 1px; border-radius: 8px; width: 100%; cursor: pointer; }
-        .btn-reset-hours:hover { background: #f85149; border-color: #ff7b72; color: white; }
+        .maint-actions { display: flex; flex-direction: column; gap: 8px; }
+        .btn-maint { width: 100%; padding: 12px; border-radius: 8px; font-size: 11px; font-weight: bold; cursor: pointer; letter-spacing: 1px; transition: 0.2s; }
+        .btn-update { background: #388bfd; border: 1px solid #58a6ff; color: white; }
+        .btn-update:hover { background: #1f6feb; }
+        .btn-reset { background: transparent; border: 1px solid #444c56; color: #8b949e; }
+        .btn-reset:hover { background: #f85149; border-color: #ff7b72; color: white; }
 
-        /* HISTÓRICO VISIBILIDADE */
         .history-table { width: 100%; border-collapse: collapse; font-size: 14px; color: #e6edf3; }
-        .history-table thead { background-color: #0d1117; position: sticky; top: 0; z-index: 5; }
+        .history-table thead { background-color: #0d1117; position: sticky; top: 0; }
         .history-table th { color: var(--accent); text-align: left; padding: 15px 12px; border-bottom: 2px solid var(--panel-border); text-transform: uppercase; font-size: 11px; }
         .history-table td { padding: 12px; border-bottom: 1px solid #30363d; }
-        .tag-badge { background: #2d333b; color: #58a6ff; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 12px; border: 1px solid #444c56; }
+        .tag-badge { background: #2d333b; color: #58a6ff; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 12px; }
         .desc-text { font-weight: 600; color: #fff; }
     </style>
 </head>
@@ -126,20 +128,20 @@
 
 <div id="overlay-link">
     <div class="overlay-box">
-        <div class="blink-text">ERRO DE COMUNICAÇÃO</div>
-        <p>Aguardando dados do hardware ou conexão interrompida.</p>
-        <button class="btn btn-on" onclick="location.reload()">RECONECTAR AGORA</button>
+        <div class="blink-text">ERRO DE CONEXÃO</div>
+        <p>Verificando link com hardware...</p>
+        
     </div>
 </div>
 
 <div class="header">
-    <h2>SISTEMA MPE INDUSTRIAL v7.1</h2>
-    <div id="mqtt-status" style="font-size: 11px; color:var(--pump-off); font-weight: bold; margin-top: 5px;">MQTT: TENTANDO CONEXÃO...</div>
+    <h2>SISTEMA MPE INDUSTRIAL v7.5</h2>
+    <div id="mqtt-status" style="font-size: 11px; color:var(--pump-off); font-weight: bold; margin-top: 5px;">MQTT: INICIALIZANDO...</div>
 </div>
 
-<!-- O Canvas SCADA permanece o mesmo da v7.1 -->
 <div class="scada-wrapper">
     <div class="scada-canvas" id="main-canvas">
+        <!-- (SVG dos Pipes mantido conforme original) -->
         <svg class="pipes-layer">
             <path class="p-base" d="M 30 430 L 100 430 L 100 320 L 150 320" /><path id="f-succao" class="f-line" stroke="var(--water)" d="M 30 430 L 100 430 L 100 320 L 150 320" />
             <path class="p-base" d="M 195 130 L 195 280" /><path id="f-vacuo" class="f-line" stroke="var(--gas)" d="M 195 130 L 195 280" />
@@ -167,7 +169,7 @@
 
 <div class="main-container">
     <div class="card">
-        <small>Controle e Alertas de Sistema</small>
+        <small>Alertas e Comandos</small>
         <div style="display:flex; gap:10px;">
             <button class="btn btn-on" onclick="enviarComando('start', '1')">START</button>
             <button class="btn btn-off" onclick="enviarComando('reset', '1')">RESET</button>
@@ -186,18 +188,22 @@
     </div>
 
     <div class="card">
-        <small>Indicadores de Tempo (Pausados se Offline)</small>
+        <small>Acumuladores (Horímetros)</small>
         <div class="stats-grid">
             <div class="stat-box"><span id="time-bvr" class="stat-val">00:00:00</span><span class="stat-label">BVR Radial</span></div>
             <div class="stat-box"><span id="time-bc1" class="stat-val">00:00:00</span><span class="stat-label">BC-01 Helic.</span></div>
             <div class="stat-box"><span id="time-bc2" class="stat-val">00:00:00</span><span class="stat-label">BC-02 Centr.</span></div>
-            <div class="stat-box" style="border-color: rgba(248, 81, 73, 0.5);"><span id="time-falha" class="stat-val" style="color: var(--pump-off)">00:00:00</span><span class="stat-label" style="color: var(--pump-off)">Tempo em Falha</span></div>
+            <div class="stat-box"><span id="time-falha" class="stat-val" style="color: var(--pump-off)">00:00:00</span><span class="stat-label" style="color: var(--pump-off)">Falhas</span></div>
         </div>
-        <button class="btn-reset-hours" onclick="resetarHorimetrosComSenha()">RESETAR HORÍMETROS (REQUER SENHA)</button>
+        
+        <div class="maint-actions">
+            <button class="btn-maint btn-reset" onclick="resetarHorimetrosComSenha()">RESETAR HORÍMETROS</button>
+            <button class="btn-maint btn-update" onclick="atualizarHorasDoBanco()">ATUALIZAR HORAS DO BANCO</button>
+        </div>
     </div>
 
     <div class="card card-full">
-        <small>Histórico Técnico de Eventos (Duração Registrada no LOG)</small>
+        <small>Histórico Técnico Supabase</small>
         <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--panel-border); border-radius: 8px; background: #0d1117;">
             <table class="history-table">
                 <thead>
@@ -205,7 +211,7 @@
                         <th>DATA/HORA</th>
                         <th>TAG</th>
                         <th>ESTADO</th>
-                        <th>DURAÇÃO/DESCRIÇÃO</th>
+                        <th>EVENTOS/DESCRIÇÃO</th>
                     </tr>
                 </thead>
                 <tbody id="tabela-corpo"></tbody>
@@ -215,76 +221,68 @@
 </div>
 
 <script>
-    // --- CONFIGURAÇÃO SUPABASE ---
+    // Configurações
     const SUPABASE_URL = 'https://gopjlloogukzyshtuxko.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvcGpsbG9vZ3VrenlzaHR1eGtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MzMwNDcsImV4cCI6MjA5NDAwOTA0N30.Z8Ir0xX5r4qLKsGUFEmVWbYLXRoiud2VWuxx3tz8krA';
     const _supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // --- CONFIGURAÇÃO MQTT ---
     const BROKER = "703f5ff76b174323a13b99c0940fca41.s1.eu.hivemq.cloud";
     const PORT = 8884;
     const TOPICO = "planta/mpe/";
-    const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "Web_MPE_" + Math.random().toString(16).slice(2, 6));
+    const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "MPE_JS_" + Math.random().toString(16).slice(2, 6));
 
-    // --- ESTADOS E VARIÁVEIS ---
+    // Estados e Dados
     let pumpTimes = JSON.parse(localStorage.getItem('mpe_horimetro_v4')) || { bvr: 0, bc1: 0, bc2: 0, falha: 0 };
-    let states = { bvr: false, bc1: false, bc2: false, alarme: false };
-    let startTimes = { bvr: null, bc1: null, bc2: null, alarme: null };
+    let states = { bvr: false, bc1: false, bc2: false, alarme: false, ping: null };
     
-    let lastPing = null; // Começa como null para não dar erro antes da primeira msg
-    let isHardwareOnline = false;
+    let lastPing = null;
     let isMqttConnected = false;
 
+    const mapeamento = {
+        "ping": "Status de Conexão",
+        "bomba_radial": "BVR Radial", 
+        "bomba_helicoidal": "BC-01 Helicoidal",
+        "bomba_centrifuga": "BC-02 Centrifuga", 
+        "alarme": "Falha Crítica",
+        "nivel_alto": "Nível Alto TK-01", 
+        "nivel_alto_res": "Nível Alto TK-02", 
+        "energia": "Energia",
+        "reset_sistema": "RESET DE MANUTENÇÃO"
+    };
+
+    // Formatação de tempo
     const formatSeconds = (s) => {
         let h = Math.floor(s/3600), m = Math.floor((s%3600)/60), rs = s%60;
         return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(rs).padStart(2,'0')}`;
     };
 
-    const mapeamento = {
-        "nivel_alto": "Nível Alto: TK-01 (Vácuo)", "nivel_alto_res": "Nível Alto: TK-02 (Água)",
-        "nivel_emerg": "Emergência: Transbordo TK-01", "nivel_emerg_res": "Emergência: Transbordo TK-02",
-        "oleo_cheio": "Reservatório de Óleo Cheio", "bomba_radial": "BVR Radial",
-        "bomba_helicoidal": "BC-01 Helicoidal", "bomba_centrifuga": "BC-02 Centrifuga",
-        "alarme": "Falha Crítica", "energia": "Monitor de Rede", "sistema": "Sistema Geral"
-    };
-
-    // --- LOOP DE MONITORAMENTO ---
+    // Watchdog e Horímetros
     setInterval(() => {
         const statusEl = document.getElementById('mqtt-status');
-        
         if (!isMqttConnected) {
             statusEl.innerText = "MQTT: DESCONECTADO";
             statusEl.style.color = "var(--pump-off)";
-            return;
-        }
-
-        if (lastPing === null) {
-            statusEl.innerText = "MQTT: CONECTADO | STATUS: AGUARDANDO HARDWARE...";
+        } else if (lastPing === null) {
+            statusEl.innerText = "MQTT: CONECTADO | AGUARDANDO HARDWARE...";
             statusEl.style.color = "var(--accent)";
-            return;
-        }
-
-        const diff = (Date.now() - lastPing) / 1000;
-        if(diff > 65) { // Tolerância de 65 segundos
-            isHardwareOnline = false;
-            document.getElementById('overlay-link').style.display = 'flex';
-            statusEl.innerText = `MQTT: CONECTADO | STATUS: OFFLINE (${Math.floor(diff)}s)`;
-            statusEl.style.color = "var(--pump-off)";
         } else {
-            isHardwareOnline = true;
-            document.getElementById('overlay-link').style.display = 'none';
-            statusEl.innerText = `MQTT: CONECTADO | STATUS: ONLINE`;
-            statusEl.style.color = "var(--pump-on)";
-            
-            // Incrementa horímetros
-            let changed = false;
-            if(states.bvr) { pumpTimes.bvr++; changed = true; }
-            if(states.bc1) { pumpTimes.bc1++; changed = true; }
-            if(states.bc2) { pumpTimes.bc2++; changed = true; }
-            if(states.alarme) { pumpTimes.falha++; changed = true; }
-            if(changed) { 
+            const diff = (Date.now() - lastPing) / 1000;
+            if (diff > 65) {
+                document.getElementById('overlay-link').style.display = 'flex';
+                statusEl.innerText = `MQTT: CONECTADO | STATUS: OFFLINE`;
+                statusEl.style.color = "var(--pump-off)";
+            } else {
+                document.getElementById('overlay-link').style.display = 'none';
+                statusEl.innerText = "MQTT: CONECTADO | STATUS: ONLINE";
+                statusEl.style.color = "var(--pump-on)";
+                
+                if(states.bvr) pumpTimes.bvr++;
+                if(states.bc1) pumpTimes.bc1++;
+                if(states.bc2) pumpTimes.bc2++;
+                if(states.alarme) pumpTimes.falha++;
+                
                 localStorage.setItem('mpe_horimetro_v4', JSON.stringify(pumpTimes)); 
-                updateUIStats(); 
+                updateUIStats();
             }
         }
     }, 1000);
@@ -296,28 +294,53 @@
         document.getElementById('time-falha').innerText = formatSeconds(pumpTimes.falha);
     }
 
-    // --- BANCO DE DADOS ---
-    async function salvarNoBanco(tag, valor) {
-        const on = (valor === "1");
-        let descricaoFinal = mapeamento[tag] || tag;
-        const tagsCronometradas = ["bomba_radial", "bomba_helicoidal", "bomba_centrifuga", "alarme"];
-        
-        if (tagsCronometradas.includes(tag)) {
-            const shortKey = tag === "bomba_radial" ? "bvr" : tag === "bomba_helicoidal" ? "bc1" : tag === "bomba_centrifuga" ? "bc2" : "alarme";
-            if (on) {
-                startTimes[shortKey] = Date.now();
-                descricaoFinal += " -> INICIOU OPERAÇÃO";
-            } else {
-                if (startTimes[shortKey]) {
-                    const duracaoSegundos = Math.floor((Date.now() - startTimes[shortKey]) / 1000);
-                    descricaoFinal += ` -> OPEROU POR: ${formatSeconds(duracaoSegundos)}`;
-                    startTimes[shortKey] = null;
-                } else { descricaoFinal += " -> DESLIGADO"; }
-            }
-        } else { descricaoFinal += on ? " -> ATIVADO" : " -> NORMALIZADO"; }
+    // --- FUNÇÕES DE BANCO DE DADOS ---
 
-        await _supa.from('historico_eventos').insert([{ tag, valor, descricao: descricaoFinal }]);
-        carregarDB();
+    async function salvarNoBanco(tag, valor) {
+        const isLigado = (valor === "1");
+        
+        // Evita logs repetidos de ping (só loga se mudar o estado)
+        if (tag === "ping") {
+            if (states.ping === valor) return; 
+            states.ping = valor;
+        }
+
+        let descricaoBase = mapeamento[tag] || tag;
+        let infoAdicional = "";
+
+        const monitorados = {
+            "bomba_radial": "bvr", 
+            "bomba_helicoidal": "bc1",
+            "bomba_centrifuga": "bc2", 
+            "alarme": "falha"
+        };
+
+        // Lógica de Mensagem Personalizada
+        if (tag === "ping") {
+            const agora = new Date().toLocaleTimeString();
+            infoAdicional = isLigado ? ` -> CONEXÃO HARDWARE OK ÀS ${agora}` : ` -> HARDWARE DESCONECTADO / TIMEOUT`;
+        } 
+        else if (monitorados[tag]) {
+            const id = monitorados[tag];
+            infoAdicional = isLigado 
+                ? ` -> INÍCIO (Acumulado: ${formatSeconds(pumpTimes[id])})` 
+                : ` -> FIM (Duração: ${formatSeconds(pumpTimes[id])})`;
+        } 
+        else if (tag === "reset_sistema") {
+            infoAdicional = " -> TODOS OS HORÍMETROS FORAM ZERADOS PELO USUÁRIO";
+        } 
+        else { 
+            infoAdicional = isLigado ? " -> ATIVADO" : " -> NORMALIZADO"; 
+        }
+
+        try {
+            await _supa.from('historico_eventos').insert([{ 
+                tag, 
+                valor, 
+                descricao: descricaoBase + infoAdicional 
+            }]);
+            carregarDB();
+        } catch (e) { console.error("Erro Supabase:", e); }
     }
 
     async function carregarDB() {
@@ -325,23 +348,28 @@
         if (data) {
             document.getElementById('tabela-corpo').innerHTML = data.map(row => `
                 <tr>
-                    <td style="color:#8b949e; font-family: monospace;">${new Date(row.created_at).toLocaleString()}</td>
+                    <td style="color:#8b949e; font-size:12px;">${new Date(row.created_at).toLocaleString()}</td>
                     <td><span class="tag-badge">${row.tag}</span></td>
-                    <td style="font-weight:bold; color:${row.valor === '1' ? '#ff7b72' : '#2ea043'}">${row.valor === '1' ? 'LIG' : 'DES'}</td>
+                    <td style="font-weight:bold; color:${row.valor === '1' ? '#ff7b72' : '#2ea043'}">${row.valor === '1' ? 'ATIVO' : 'OK'}</td>
                     <td class="desc-text">${row.descricao}</td>
                 </tr>`).join('');
         }
     }
 
-    // --- MQTT HANDLERS ---
-    client.onConnectionLost = (resp) => {
-        isMqttConnected = false;
-        isHardwareOnline = false;
-        setTimeout(conectar, 5000);
-    };
+    // --- MQTT E COMANDOS ---
 
+    function conectar() {
+        client.connect({
+            userName: "ebcandido", password: "Elson@2015", useSSL: true,
+            onSuccess: () => { isMqttConnected = true; client.subscribe(TOPICO + "#"); },
+            onFailure: () => { isMqttConnected = false; setTimeout(conectar, 5000); }
+        });
+    }
+
+    client.onConnectionLost = () => { isMqttConnected = false; setTimeout(conectar, 5000); };
+    
     client.onMessageArrived = (msg) => {
-        lastPing = Date.now(); // Atualiza o sinal de vida do hardware
+        lastPing = Date.now();
         const tag = msg.destinationName.replace(TOPICO, "");
         const val = msg.payloadString;
         processarVisual(tag, val);
@@ -354,14 +382,14 @@
             case "bomba_radial": states.bvr = on; toggleBomba('bvr', on, ['f-vacuo', 'f-succao']); break;
             case "bomba_helicoidal": states.bc1 = on; toggleBomba('bc1', on, ['f-bc1-in', 'f-bc1-out']); break;
             case "bomba_centrifuga": states.bc2 = on; toggleBomba('bc2', on, ['f-bc2-in', 'f-bc2-out', 'f-sao-in', 'f-sao-agua', 'f-filter-out']); break;
-            case "nivel_alto": document.getElementById('lvl-vacuo').style.height = on ? "95%" : "25%"; document.getElementById('alm-v-alto').classList.toggle('alarm-active', on); break;
-            case "nivel_alto_res": document.getElementById('lvl-agua').style.height = on ? "95%" : "25%"; document.getElementById('alm-r-alto').classList.toggle('alarm-active', on); break;
+            case "nivel_alto": document.getElementById('lvl-vacuo').style.height = on ? "95%" : "20%"; document.getElementById('alm-v-alto').classList.toggle('alarm-active', on); break;
+            case "nivel_alto_res": document.getElementById('lvl-agua').style.height = on ? "95%" : "20%"; document.getElementById('alm-r-alto').classList.toggle('alarm-active', on); break;
             case "nivel_emerg": document.getElementById('tank-tk01').classList.toggle('emerg-active', on); document.getElementById('alm-v-emerg').classList.toggle('alarm-active', on); break;
             case "nivel_emerg_res": document.getElementById('tank-tk02').classList.toggle('emerg-active', on); document.getElementById('alm-r-emerg').classList.toggle('alarm-active', on); break;
             case "oleo_cheio": document.getElementById('dev-oleo').classList.toggle('emerg-active', on); document.getElementById('alm-oleo').classList.toggle('alarm-active', on); break;
             case "alarme": states.alarme = on; document.getElementById('main-canvas').classList.toggle('emerg-active', on); document.getElementById('alm-critico').classList.toggle('alarm-active', on); break;
             case "energia": const en = document.getElementById('alm-energia'); en.innerText = on ? "⚠ FALHA DE ENERGIA" : "⚡ MONITOR DE REDE OK"; en.classList.toggle('alarm-active', on); break;
-            case "sistema": const s = document.getElementById('status-badge'); s.innerText = on ? "EM OPERAÇÃO" : "STANDBY"; s.style.background = on ? "var(--pump-on)" : "#30363d"; break;
+            case "sistema": const s = document.getElementById('status-badge'); s.innerText = on ? "SISTEMA EM OPERAÇÃO" : "SISTEMA EM STANDBY"; s.style.background = on ? "var(--pump-on)" : "#30363d"; break;
         }
     }
 
@@ -378,25 +406,42 @@
         client.send(m);
     }
 
-    function conectar() {
-        client.connect({
-            userName: "ebcandido", password: "Elson@2015", useSSL: true,
-            onSuccess: () => { 
-                isMqttConnected = true;
-                client.subscribe(TOPICO + "#"); 
-            },
-            onFailure: () => {
-                isMqttConnected = false;
-                setTimeout(conectar, 5000);
+    // --- MANUTENÇÃO ---
+
+    async function atualizarHorasDoBanco() {
+        const btn = document.querySelector('.btn-update');
+        btn.innerText = "SINCRONIZANDO...";
+        btn.disabled = true;
+        try {
+            const tags = ["bomba_radial", "bomba_helicoidal", "bomba_centrifuga", "alarme"];
+            for (let tag of tags) {
+                const { data } = await _supa.from('historico_eventos').select('descricao').eq('tag', tag).ilike('descricao', '%Duração:%').order('created_at', { ascending: false }).limit(1);
+                if (data && data.length > 0) {
+                    const match = data[0].descricao.match(/(\d{2}):(\d{2}):(\d{2})/);
+                    if (match) {
+                        const sec = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]);
+                        if (tag === "bomba_radial") pumpTimes.bvr = sec;
+                        if (tag === "bomba_helicoidal") pumpTimes.bc1 = sec;
+                        if (tag === "bomba_centrifuga") pumpTimes.bc2 = sec;
+                        if (tag === "alarme") pumpTimes.falha = sec;
+                    }
+                }
             }
-        });
+            localStorage.setItem('mpe_horimetro_v4', JSON.stringify(pumpTimes));
+            updateUIStats();
+            alert("Sucesso!");
+        } catch (e) { alert("Erro: " + e.message); }
+        finally { btn.innerText = "ATUALIZAR HORAS DO BANCO"; btn.disabled = false; }
     }
 
-    function resetarHorimetrosComSenha() {
-        if (prompt("Senha admin:") === "admin123") {
+    async function resetarHorimetrosComSenha() {
+        if (prompt("Senha de Segurança:") === "admin123") {
+            const logAntigo = `BVR:${formatSeconds(pumpTimes.bvr)} | BC1:${formatSeconds(pumpTimes.bc1)} | BC2:${formatSeconds(pumpTimes.bc2)}`;
             pumpTimes = { bvr: 0, bc1: 0, bc2: 0, falha: 0 };
             localStorage.setItem('mpe_horimetro_v4', JSON.stringify(pumpTimes));
             updateUIStats();
+            await _supa.from('historico_eventos').insert([{ tag: "reset_sistema", valor: "0", descricao: `MANUTENÇÃO: Zerado. (Antes: ${logAntigo})` }]);
+            carregarDB();
         }
     }
 
