@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MPE Industrial - v4.5 Full</title>
+    <title>MPE Industrial - v7.1 Sensacional</title>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <style>
         :root {
             --bg-dark: #0b0e14;
@@ -19,6 +22,7 @@
             --gas: #8b949e;
             --emergency: #ff3333;
             --text-main: #adbac7;
+            --charcoal: #2d333b;
         }
 
         * { box-sizing: border-box; transition: background 0.3s, border 0.3s, box-shadow 0.3s; }
@@ -27,391 +31,376 @@
             background-color: var(--bg-dark);
             color: var(--text-main);
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
+            margin: 0; padding: 0;
+            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
         }
 
-        /* HEADER */
+        #overlay-link {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 9999; flex-direction: column;
+            justify-content: center; align-items: center; text-align: center;
+        }
+        .overlay-box { border: 2px solid var(--emergency); padding: 40px; border-radius: 15px; background: #161b22; }
+        .blink-text { animation: blink 1s infinite; color: var(--emergency); font-weight: bold; font-size: 24px; }
+
         .header {
-            padding: 15px;
-            text-align: center;
-            width: 100%;
-            background: var(--panel);
-            border-bottom: 2px solid var(--panel-border);
-            position: sticky;
-            top: 0;
-            z-index: 2000;
+            padding: 15px; text-align: center; width: 100%;
+            background: var(--panel); border-bottom: 2px solid var(--panel-border);
+            position: sticky; top: 0; z-index: 2000;
         }
 
         .header h2 { font-size: 1.2rem; margin: 0; color: #fff; letter-spacing: 1px; }
 
-        /* SCADA CANVAS */
         .scada-wrapper {
-            width: 100%;
-            overflow-x: auto;
-            padding: 20px 10px;
-            display: flex;
-            justify-content: flex-start;
-            background: #010409;
-            -webkit-overflow-scrolling: touch;
+            width: 100%; display: flex; justify-content: center; align-items: center;
+            padding: 20px; background: #010409; overflow-x: auto;
         }
 
         .scada-canvas {
-            position: relative;
-            width: 1100px; 
-            height: 550px;
-            background: #0d1117;
-            border: 1px solid var(--panel-border);
-            border-radius: 12px;
-            flex-shrink: 0;
-            background-image: 
-                linear-gradient(rgba(48, 54, 61, 0.1) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(48, 54, 61, 0.1) 1px, transparent 1px);
+            position: relative; width: 1100px; height: 550px;
+            background: #0d1117; border: 1px solid var(--panel-border);
+            border-radius: 12px; flex-shrink: 0;
+            background-image: linear-gradient(rgba(48,54,61,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(48,54,61,0.1) 1px, transparent 1px);
             background-size: 30px 30px;
         }
 
-        #ping-overlay {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(13, 17, 23, 0.92);
-            z-index: 1000;
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            border-radius: 10px;
+        @keyframes emerg-blink {
+            0% { border-color: var(--emergency); box-shadow: 0 0 5px var(--emergency); }
+            50% { border-color: #fff; box-shadow: 0 0 25px var(--emergency); }
+            100% { border-color: var(--emergency); box-shadow: 0 0 5px var(--emergency); }
         }
 
-        /* PIPES & FLOW */
+        .emerg-active { animation: emerg-blink 0.6s infinite !important; border-width: 3px !important; z-index: 100 !important; }
+
         .pipes-layer { position: absolute; width: 100%; height: 100%; z-index: 1; }
         .p-base { fill: none; stroke: var(--pipe); stroke-width: 10; stroke-linejoin: round; stroke-linecap: round; }
         .f-line { fill: none; stroke-width: 5; stroke-dasharray: 10, 15; animation: flow 1s linear infinite; display: none; }
         @keyframes flow { from { stroke-dashoffset: 25; } to { stroke-dashoffset: 0; } }
 
-        /* DEVICES */
-        .device {
-            position: absolute;
-            background: var(--panel);
-            border: 2px solid #444;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 10;
-            font-size: 11px;
-            font-weight: bold;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        }
-
+        .device { position: absolute; background: var(--panel); border: 2px solid #444; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; font-size: 11px; font-weight: bold; }
         .pump { width: 60px; height: 60px; border-radius: 50%; }
         .pump.on { border-color: var(--pump-on); box-shadow: 0 0 20px var(--pump-on); background: #1b4332; color: #fff; }
         .pump.off { border-color: var(--pump-off); }
 
         .tank { width: 90px; height: 130px; border-radius: 6px; overflow: hidden; }
         .silo { border-bottom-left-radius: 30px; border-bottom-right-radius: 30px; }
-        .tank-emerg { border-color: var(--emergency) !important; box-shadow: 0 0 20px var(--emergency); animation: emerg-blink 0.8s infinite; }
-        @keyframes emerg-blink { 50% { border-color: transparent; } }
+        .level { position: absolute; bottom: 0; width: 100%; background: linear-gradient(to top, var(--water), #58a6ff); height: 20%; transition: height 1s; border-top: 2px solid #fff; z-index: -1; opacity: 0.8; }
 
-        .level {
-            position: absolute;
-            bottom: 0; width: 100%;
-            background: linear-gradient(to top, var(--water), #58a6ff);
-            height: 20%; transition: height 1s ease-in-out;
-            border-top: 2px solid #fff;
-            z-index: -1;
-            opacity: 0.8;
-        }
+        .filter { width: 50px; height: 70px; border-radius: 4px; background: var(--charcoal); border: 2px solid #555; }
 
-        .label-tag {
-            background: #000;
-            padding: 2px 5px;
-            border-radius: 3px;
-            font-size: 9px;
-            margin-bottom: 3px;
-            color: var(--accent);
-            border: 1px solid var(--accent);
-        }
+        .label-tag { background: #000; padding: 2px 5px; border-radius: 3px; font-size: 9px; margin-bottom: 3px; color: var(--accent); border: 1px solid var(--accent); }
 
-        /* DASHBOARD CARDS */
-        .dashboard {
-            width: 100%;
-            max-width: 1200px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 15px;
-            padding: 20px;
-            margin-bottom: 40px;
-        }
+        .main-container { width: 100%; max-width: 1300px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; }
+        .card { background: var(--panel); padding: 18px; border-radius: 12px; border: 1px solid var(--panel-border); }
+        .card-full { grid-column: 1 / -1; }
+        .card small { color: var(--accent); font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 15px; font-size: 10px; }
 
-        .card { 
-            background: var(--panel); 
-            padding: 15px; 
-            border-radius: 12px; 
-            border: 1px solid var(--panel-border);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-
-        .card small { color: var(--accent); font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 10px; }
-
-        .btn { 
-            width: 100%; padding: 16px; border: none; border-radius: 8px; 
-            font-weight: bold; color: white; cursor: pointer; margin-top: 10px; font-size: 14px;
-        }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 8px; font-weight: bold; color: white; cursor: pointer; margin-top: 10px; }
         .btn-on { background: var(--pump-on); }
         .btn-off { background: var(--pump-off); }
-        .btn:active { opacity: 0.8; transform: translateY(1px); }
-
-        .alarm-item {
-            display: flex; align-items: center; padding: 10px; margin-bottom: 6px;
-            background: #0d1117; border-radius: 6px; border-left: 4px solid #30363d;
-            font-size: 12px; color: #8b949e;
-        }
+        
+        .alarm-item { display: flex; align-items: center; padding: 8px; margin-bottom: 5px; background: #0d1117; border-radius: 6px; border-left: 4px solid #30363d; font-size: 11px; color: #8b949e; }
         .alarm-active { border-left-color: var(--pump-off); color: #ff7b72; font-weight: bold; animation: blink 1s infinite; }
-        .alarm-crit { border-left-color: #ff0000; background: #2a0a0a; color: #ff0000; }
-        @keyframes blink { 50% { opacity: 0.7; } }
+        
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
-        .status-badge { 
-            padding: 12px; border-radius: 8px; font-size: 14px; 
-            font-weight: bold; margin-top: 10px; text-align: center;
-            border: 1px solid rgba(255,255,255,0.05);
-        }
+        /* INDICADORES DE TEMPO */
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 15px; }
+        .stat-box { background: #0d1117; padding: 20px 10px; border-radius: 10px; border: 1px solid var(--panel-border); text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
+        .stat-val { display: block; font-size: 24px; font-family: 'Courier New', Courier, monospace; font-weight: bold; color: #ffffff; letter-spacing: 2px; margin-bottom: 5px; }
+        .stat-label { font-size: 11px; color: var(--accent); text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
 
-        @media (min-width: 1150px) {
-            .scada-wrapper { justify-content: center; overflow: hidden; }
-        }
+        .btn-reset-hours { background: #2d333b; border: 1px solid #444c56; color: #adbac7; padding: 12px; font-size: 11px; font-weight: bold; letter-spacing: 1px; border-radius: 8px; width: 100%; cursor: pointer; }
+        .btn-reset-hours:hover { background: #f85149; border-color: #ff7b72; color: white; }
+
+        /* HISTÓRICO VISIBILIDADE */
+        .history-table { width: 100%; border-collapse: collapse; font-size: 14px; color: #e6edf3; }
+        .history-table thead { background-color: #0d1117; position: sticky; top: 0; z-index: 5; }
+        .history-table th { color: var(--accent); text-align: left; padding: 15px 12px; border-bottom: 2px solid var(--panel-border); text-transform: uppercase; font-size: 11px; }
+        .history-table td { padding: 12px; border-bottom: 1px solid #30363d; }
+        .tag-badge { background: #2d333b; color: #58a6ff; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 12px; border: 1px solid #444c56; }
+        .desc-text { font-weight: 600; color: #fff; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h2>SISTEMA MPE INDUSTRIAL v4.5</h2>
-    <div id="mqtt-status" style="font-size: 12px; color:var(--pump-off); font-weight: bold; margin-top: 5px;">MQTT: DESCONECTADO</div>
+<div id="overlay-link">
+    <div class="overlay-box">
+        <div class="blink-text">ERRO DE COMUNICAÇÃO</div>
+        <p>Aguardando dados do hardware ou conexão interrompida.</p>
+        <button class="btn btn-on" onclick="location.reload()">RECONECTAR AGORA</button>
+    </div>
 </div>
 
+<div class="header">
+    <h2>SISTEMA MPE INDUSTRIAL v7.1</h2>
+    <div id="mqtt-status" style="font-size: 11px; color:var(--pump-off); font-weight: bold; margin-top: 5px;">MQTT: TENTANDO CONEXÃO...</div>
+</div>
+
+<!-- O Canvas SCADA permanece o mesmo da v7.1 -->
 <div class="scada-wrapper">
     <div class="scada-canvas" id="main-canvas">
-        
-        <div id="ping-overlay">
-            <h2 style="color: var(--pump-off);">⚠️ CONEXÃO PERDIDA</h2>
-            <p style="color: #8b949e; font-size: 14px;">Aguardando sinal do hardware...</p>
-        </div>
-
         <svg class="pipes-layer">
-            <!-- Caminhos originais mantidos -->
-            <path class="p-base" d="M 30 430 L 100 430 L 100 320 L 150 320" />
-            <path id="f-succao" class="f-line" stroke="var(--water)" d="M 30 430 L 100 430 L 100 320 L 150 320" />
-            <path class="p-base" d="M 195 130 L 195 280" />
-            <path id="f-vacuo" class="f-line" stroke="var(--gas)" d="M 195 130 L 195 280" />
-            <path class="p-base" d="M 195 410 L 195 440 L 260 440" />
-            <path id="f-bc1-in" class="f-line" stroke="var(--water)" d="M 195 410 L 195 440 L 260 440" />
-            <path class="p-base" d="M 320 440 L 450 440 L 450 140 L 500 140" />
-            <path id="f-bc1-out" class="f-line" stroke="var(--water)" d="M 320 440 L 450 440 L 450 140 L 500 140" />
-            <path class="p-base" d="M 550 230 L 550 300 L 640 300" />
-            <path id="f-sao-in" class="f-line" stroke="var(--water)" d="M 550 230 L 550 300 L 640 300" />
-            <path class="p-base" d="M 720 380 L 720 480 L 780 480" />
-            <path id="f-sao-agua" class="f-line" stroke="var(--water)" d="M 720 380 L 720 480 L 780 480" />
-            <path class="p-base" d="M 880 480 L 920 480" />
-            <path id="f-bc2-in" class="f-line" stroke="var(--water)" d="M 880 480 L 920 480" />
-            <path class="p-base" d="M 980 480 L 1050 480 L 1050 430" />
-            <path id="f-bc2-out" class="f-line" stroke="var(--water)" d="M 980 480 L 1050 480 L 1050 430" />
+            <path class="p-base" d="M 30 430 L 100 430 L 100 320 L 150 320" /><path id="f-succao" class="f-line" stroke="var(--water)" d="M 30 430 L 100 430 L 100 320 L 150 320" />
+            <path class="p-base" d="M 195 130 L 195 280" /><path id="f-vacuo" class="f-line" stroke="var(--gas)" d="M 195 130 L 195 280" />
+            <path class="p-base" d="M 195 410 L 195 440 L 260 440" /><path id="f-bc1-in" class="f-line" stroke="var(--water)" d="M 195 410 L 195 440 L 260 440" />
+            <path class="p-base" d="M 320 440 L 450 440 L 450 140 L 500 140" /><path id="f-bc1-out" class="f-line" stroke="var(--water)" d="M 320 440 L 450 440 L 450 140 L 500 140" />
+            <path class="p-base" d="M 550 230 L 550 300 L 640 300" /><path id="f-sao-in" class="f-line" stroke="var(--water)" d="M 550 230 L 550 300 L 640 300" />
+            <path class="p-base" d="M 780 320 L 830 320" /><path id="f-sao-oleo" class="f-line" stroke="var(--oil)" d="M 780 320 L 830 320" />
+            <path class="p-base" d="M 720 380 L 720 480 L 780 480" /><path id="f-sao-agua" class="f-line" stroke="var(--water)" d="M 720 380 L 720 480 L 780 480" />
+            <path class="p-base" d="M 880 480 L 920 480" /><path id="f-bc2-in" class="f-line" stroke="var(--water)" d="M 880 480 L 920 480" />
+            <path class="p-base" d="M 980 480 L 1025 480 L 1025 430" /><path id="f-bc2-out" class="f-line" stroke="var(--water)" d="M 980 480 L 1025 480 L 1025 430" />
+            <path class="p-base" d="M 1025 360 L 1025 320 L 1070 320" /><path id="f-filter-out" class="f-line" stroke="var(--water)" d="M 1025 360 L 1025 320 L 1070 320" />
         </svg>
 
-        <!-- Elementos Scada -->
         <div id="dev-bvr" class="device pump off" style="left: 165px; top: 70px;"><span class="label-tag">BVR</span>BOMBA</div>
         <div id="tank-tk01" class="device tank silo" style="left: 150px; top: 280px;"><div id="lvl-vacuo" class="level"></div><span class="label-tag">TK-01</span>VÁCUO</div>
         <div id="dev-bc1" class="device pump off" style="left: 260px; top: 410px;"><span class="label-tag">BC-01</span>HELIC.</div>
         <div class="device tank" style="left: 500px; top: 100px;"><div id="lvl-sup" class="level" style="height: 40%;"></div><span class="label-tag">TQ-SUP</span>SUP.</div>
-        <div class="device" style="left: 640px; top: 270px; width: 140px; height: 110px; background: linear-gradient(to bottom, #d29922 20%, #1f6feb 80%); border-radius: 4px;"><span class="label-tag">S.A.O.</span>S.A.O</div>
-        <div id="dev-oleo" class="device" style="left: 830px; top: 300px; width: 70px; height: 60px; border-radius: 4px;"><span class="label-tag" style="color:var(--oil)">ÓLEO</span>DESCARTE</div>
+        <div id="dev-sao" class="device" style="left: 640px; top: 270px; width: 140px; height: 110px; background: linear-gradient(to bottom, #d29922 20%, #1f6feb 80%); border-radius: 4px;"><span class="label-tag">S.A.O.</span>S.A.O</div>
+        <div id="dev-oleo" class="device" style="left: 830px; top: 300px; width: 70px; height: 60px;"><span class="label-tag" style="color:var(--oil)">ÓLEO</span>DESCARTE</div>
         <div id="tank-tk02" class="device tank" style="left: 780px; top: 430px; width: 100px; height: 100px;"><div id="lvl-agua" class="level"></div><span class="label-tag">TK-02</span>ÁGUA</div>
         <div id="dev-bc2" class="device pump off" style="left: 920px; top: 450px;"><span class="label-tag">BC-02</span>CENTRIF.</div>
-        <div class="device tank" style="left: 1000px; top: 300px; width: 100px; height: 130px; background: #2d333b;"><span class="label-tag">F-01</span>FILTRO</div>
+        <div id="dev-filter" class="device filter" style="left: 1000px; top: 360px;"><span class="label-tag" style="color:#fff; border-color:#fff">FILTRO</span>CARVÃO</div>
     </div>
 </div>
 
-<div class="dashboard">
+<div class="main-container">
     <div class="card">
-        <small>COMANDOS</small>
-        <button class="btn btn-on" onclick="enviarComando('start', '1')">INICIAR SISTEMA</button>
-        <button class="btn btn-off" onclick="enviarComando('reset', '1')">RESET GERAL</button>
-        <div id="status-badge" class="status-badge" style="background: #30363d; margin-top: 15px;">AGUARDANDO...</div>
-    </div>
-
-    <div class="card">
-        <small>ALARMES OPERACIONAIS</small>
-        <div class="alarm-list">
+        <small>Controle e Alertas de Sistema</small>
+        <div style="display:flex; gap:10px;">
+            <button class="btn btn-on" onclick="enviarComando('start', '1')">START</button>
+            <button class="btn btn-off" onclick="enviarComando('reset', '1')">RESET</button>
+        </div>
+        <div id="status-badge" style="padding:12px; border-radius:8px; font-weight:bold; margin-top:15px; text-align:center; background:#30363d;">AGUARDANDO...</div>
+        
+        <div style="margin-top:20px; display: grid; gap: 5px;">
             <div id="alm-critico" class="alarm-item">⚠ FALHA CRÍTICA</div>
             <div id="alm-v-alto" class="alarm-item">⚠ NÍVEL ALTO TK-01</div>
             <div id="alm-r-alto" class="alarm-item">⚠ NÍVEL ALTO TK-02</div>
             <div id="alm-oleo" class="alarm-item">⚠ DESCARTE ÓLEO CHEIO</div>
+            <div id="alm-v-emerg" class="alarm-item">⛔ TK-01 EMERGÊNCIA</div>
+            <div id="alm-r-emerg" class="alarm-item">⛔ TK-02 EMERGÊNCIA</div>
+            <div id="alm-energia" class="alarm-item">⚡ MONITOR DE REDE</div>
         </div>
     </div>
 
     <div class="card">
-        <small>EMERGÊNCIA / ENERGIA</small>
-        <div class="alarm-list">
-            <div id="alm-v-emerg" class="alarm-item">⛔ TK-01 EMERGÊNCIA</div>
-            <div id="alm-r-emerg" class="alarm-item">⛔ TK-02 EMERGÊNCIA</div>
-            <div id="alm-energia" class="alarm-item">⚠ FALHA DE ENERGIA</div>
+        <small>Indicadores de Tempo (Pausados se Offline)</small>
+        <div class="stats-grid">
+            <div class="stat-box"><span id="time-bvr" class="stat-val">00:00:00</span><span class="stat-label">BVR Radial</span></div>
+            <div class="stat-box"><span id="time-bc1" class="stat-val">00:00:00</span><span class="stat-label">BC-01 Helic.</span></div>
+            <div class="stat-box"><span id="time-bc2" class="stat-val">00:00:00</span><span class="stat-label">BC-02 Centr.</span></div>
+            <div class="stat-box" style="border-color: rgba(248, 81, 73, 0.5);"><span id="time-falha" class="stat-val" style="color: var(--pump-off)">00:00:00</span><span class="stat-label" style="color: var(--pump-off)">Tempo em Falha</span></div>
+        </div>
+        <button class="btn-reset-hours" onclick="resetarHorimetrosComSenha()">RESETAR HORÍMETROS (REQUER SENHA)</button>
+    </div>
+
+    <div class="card card-full">
+        <small>Histórico Técnico de Eventos (Duração Registrada no LOG)</small>
+        <div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--panel-border); border-radius: 8px; background: #0d1117;">
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>DATA/HORA</th>
+                        <th>TAG</th>
+                        <th>ESTADO</th>
+                        <th>DURAÇÃO/DESCRIÇÃO</th>
+                    </tr>
+                </thead>
+                <tbody id="tabela-corpo"></tbody>
+            </table>
         </div>
     </div>
 </div>
 
 <script>
-    // CONFIGURAÇÕES ORIGINAIS
+    // --- CONFIGURAÇÃO SUPABASE ---
+    const SUPABASE_URL = 'https://gopjlloogukzyshtuxko.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdvcGpsbG9vZ3VrenlzaHR1eGtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MzMwNDcsImV4cCI6MjA5NDAwOTA0N30.Z8Ir0xX5r4qLKsGUFEmVWbYLXRoiud2VWuxx3tz8krA';
+    const _supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // --- CONFIGURAÇÃO MQTT ---
     const BROKER = "703f5ff76b174323a13b99c0940fca41.s1.eu.hivemq.cloud";
     const PORT = 8884;
-    const USER = "ebcandido";
-    const PASS = "Elson@2015";
-    const TOPICO_BASE = "planta/mpe/";
+    const TOPICO = "planta/mpe/";
+    const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "Web_MPE_" + Math.random().toString(16).slice(2, 6));
 
-    let watchdogTimer = null;
-    const TIMEOUT_PULSE = 65000;
+    // --- ESTADOS E VARIÁVEIS ---
+    let pumpTimes = JSON.parse(localStorage.getItem('mpe_horimetro_v4')) || { bvr: 0, bc1: 0, bc2: 0, falha: 0 };
+    let states = { bvr: false, bc1: false, bc2: false, alarme: false };
+    let startTimes = { bvr: null, bc1: null, bc2: null, alarme: null };
+    
+    let lastPing = null; // Começa como null para não dar erro antes da primeira msg
+    let isHardwareOnline = false;
+    let isMqttConnected = false;
 
-    const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "Web_MPE_" + Math.random().toString(16).substr(2, 5));
+    const formatSeconds = (s) => {
+        let h = Math.floor(s/3600), m = Math.floor((s%3600)/60), rs = s%60;
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(rs).padStart(2,'0')}`;
+    };
 
-    function resetPingTimer() {
-        document.getElementById('ping-overlay').style.display = 'none';
-        clearTimeout(watchdogTimer);
-        watchdogTimer = setTimeout(triggerMachineOffline, TIMEOUT_PULSE);
+    const mapeamento = {
+        "nivel_alto": "Nível Alto: TK-01 (Vácuo)", "nivel_alto_res": "Nível Alto: TK-02 (Água)",
+        "nivel_emerg": "Emergência: Transbordo TK-01", "nivel_emerg_res": "Emergência: Transbordo TK-02",
+        "oleo_cheio": "Reservatório de Óleo Cheio", "bomba_radial": "BVR Radial",
+        "bomba_helicoidal": "BC-01 Helicoidal", "bomba_centrifuga": "BC-02 Centrifuga",
+        "alarme": "Falha Crítica", "energia": "Monitor de Rede", "sistema": "Sistema Geral"
+    };
+
+    // --- LOOP DE MONITORAMENTO ---
+    setInterval(() => {
+        const statusEl = document.getElementById('mqtt-status');
+        
+        if (!isMqttConnected) {
+            statusEl.innerText = "MQTT: DESCONECTADO";
+            statusEl.style.color = "var(--pump-off)";
+            return;
+        }
+
+        if (lastPing === null) {
+            statusEl.innerText = "MQTT: CONECTADO | STATUS: AGUARDANDO HARDWARE...";
+            statusEl.style.color = "var(--accent)";
+            return;
+        }
+
+        const diff = (Date.now() - lastPing) / 1000;
+        if(diff > 65) { // Tolerância de 65 segundos
+            isHardwareOnline = false;
+            document.getElementById('overlay-link').style.display = 'flex';
+            statusEl.innerText = `MQTT: CONECTADO | STATUS: OFFLINE (${Math.floor(diff)}s)`;
+            statusEl.style.color = "var(--pump-off)";
+        } else {
+            isHardwareOnline = true;
+            document.getElementById('overlay-link').style.display = 'none';
+            statusEl.innerText = `MQTT: CONECTADO | STATUS: ONLINE`;
+            statusEl.style.color = "var(--pump-on)";
+            
+            // Incrementa horímetros
+            let changed = false;
+            if(states.bvr) { pumpTimes.bvr++; changed = true; }
+            if(states.bc1) { pumpTimes.bc1++; changed = true; }
+            if(states.bc2) { pumpTimes.bc2++; changed = true; }
+            if(states.alarme) { pumpTimes.falha++; changed = true; }
+            if(changed) { 
+                localStorage.setItem('mpe_horimetro_v4', JSON.stringify(pumpTimes)); 
+                updateUIStats(); 
+            }
+        }
+    }, 1000);
+
+    function updateUIStats() {
+        document.getElementById('time-bvr').innerText = formatSeconds(pumpTimes.bvr);
+        document.getElementById('time-bc1').innerText = formatSeconds(pumpTimes.bc1);
+        document.getElementById('time-bc2').innerText = formatSeconds(pumpTimes.bc2);
+        document.getElementById('time-falha').innerText = formatSeconds(pumpTimes.falha);
     }
 
-    function triggerMachineOffline() {
-        document.getElementById('ping-overlay').style.display = 'flex';
-        document.getElementById('status-badge').innerText = "MÁQUINA OFFLINE";
-        document.getElementById('status-badge').style.background = "#30363d";
-        document.querySelectorAll('.f-line').forEach(f => f.style.display = 'none');
+    // --- BANCO DE DADOS ---
+    async function salvarNoBanco(tag, valor) {
+        const on = (valor === "1");
+        let descricaoFinal = mapeamento[tag] || tag;
+        const tagsCronometradas = ["bomba_radial", "bomba_helicoidal", "bomba_centrifuga", "alarme"];
+        
+        if (tagsCronometradas.includes(tag)) {
+            const shortKey = tag === "bomba_radial" ? "bvr" : tag === "bomba_helicoidal" ? "bc1" : tag === "bomba_centrifuga" ? "bc2" : "alarme";
+            if (on) {
+                startTimes[shortKey] = Date.now();
+                descricaoFinal += " -> INICIOU OPERAÇÃO";
+            } else {
+                if (startTimes[shortKey]) {
+                    const duracaoSegundos = Math.floor((Date.now() - startTimes[shortKey]) / 1000);
+                    descricaoFinal += ` -> OPEROU POR: ${formatSeconds(duracaoSegundos)}`;
+                    startTimes[shortKey] = null;
+                } else { descricaoFinal += " -> DESLIGADO"; }
+            }
+        } else { descricaoFinal += on ? " -> ATIVADO" : " -> NORMALIZADO"; }
+
+        await _supa.from('historico_eventos').insert([{ tag, valor, descricao: descricaoFinal }]);
+        carregarDB();
     }
 
-    client.onConnectionLost = () => {
-        document.getElementById('mqtt-status').innerText = "MQTT: DESCONECTADO";
-        document.getElementById('mqtt-status').style.color = "var(--pump-off)";
-        triggerMachineOffline();
+    async function carregarDB() {
+        const { data } = await _supa.from('historico_eventos').select('*').order('created_at', { ascending: false }).limit(15);
+        if (data) {
+            document.getElementById('tabela-corpo').innerHTML = data.map(row => `
+                <tr>
+                    <td style="color:#8b949e; font-family: monospace;">${new Date(row.created_at).toLocaleString()}</td>
+                    <td><span class="tag-badge">${row.tag}</span></td>
+                    <td style="font-weight:bold; color:${row.valor === '1' ? '#ff7b72' : '#2ea043'}">${row.valor === '1' ? 'LIG' : 'DES'}</td>
+                    <td class="desc-text">${row.descricao}</td>
+                </tr>`).join('');
+        }
+    }
+
+    // --- MQTT HANDLERS ---
+    client.onConnectionLost = (resp) => {
+        isMqttConnected = false;
+        isHardwareOnline = false;
         setTimeout(conectar, 5000);
     };
 
     client.onMessageArrived = (msg) => {
-        resetPingTimer(); 
-        const tag = msg.destinationName.replace(TOPICO_BASE, "");
-        processarDados(tag, msg.payloadString);
+        lastPing = Date.now(); // Atualiza o sinal de vida do hardware
+        const tag = msg.destinationName.replace(TOPICO, "");
+        const val = msg.payloadString;
+        processarVisual(tag, val);
+        salvarNoBanco(tag, val);
     };
+
+    function processarVisual(tag, val) {
+        const on = (val === "1");
+        switch(tag) {
+            case "bomba_radial": states.bvr = on; toggleBomba('bvr', on, ['f-vacuo', 'f-succao']); break;
+            case "bomba_helicoidal": states.bc1 = on; toggleBomba('bc1', on, ['f-bc1-in', 'f-bc1-out']); break;
+            case "bomba_centrifuga": states.bc2 = on; toggleBomba('bc2', on, ['f-bc2-in', 'f-bc2-out', 'f-sao-in', 'f-sao-agua', 'f-filter-out']); break;
+            case "nivel_alto": document.getElementById('lvl-vacuo').style.height = on ? "95%" : "25%"; document.getElementById('alm-v-alto').classList.toggle('alarm-active', on); break;
+            case "nivel_alto_res": document.getElementById('lvl-agua').style.height = on ? "95%" : "25%"; document.getElementById('alm-r-alto').classList.toggle('alarm-active', on); break;
+            case "nivel_emerg": document.getElementById('tank-tk01').classList.toggle('emerg-active', on); document.getElementById('alm-v-emerg').classList.toggle('alarm-active', on); break;
+            case "nivel_emerg_res": document.getElementById('tank-tk02').classList.toggle('emerg-active', on); document.getElementById('alm-r-emerg').classList.toggle('alarm-active', on); break;
+            case "oleo_cheio": document.getElementById('dev-oleo').classList.toggle('emerg-active', on); document.getElementById('alm-oleo').classList.toggle('alarm-active', on); break;
+            case "alarme": states.alarme = on; document.getElementById('main-canvas').classList.toggle('emerg-active', on); document.getElementById('alm-critico').classList.toggle('alarm-active', on); break;
+            case "energia": const en = document.getElementById('alm-energia'); en.innerText = on ? "⚠ FALHA DE ENERGIA" : "⚡ MONITOR DE REDE OK"; en.classList.toggle('alarm-active', on); break;
+            case "sistema": const s = document.getElementById('status-badge'); s.innerText = on ? "EM OPERAÇÃO" : "STANDBY"; s.style.background = on ? "var(--pump-on)" : "#30363d"; break;
+        }
+    }
+
+    function toggleBomba(id, status, fluxos) {
+        const d = document.getElementById(`dev-${id}`);
+        if(d) d.className = `device pump ${status ? 'on' : 'off'}`;
+        fluxos.forEach(f => { const e = document.getElementById(f); if(e) e.style.display = status ? 'block' : 'none'; });
+    }
+
+    function enviarComando(c, v) {
+        if (!isMqttConnected) return;
+        const m = new Paho.MQTT.Message(v);
+        m.destinationName = TOPICO + "comando/" + c;
+        client.send(m);
+    }
 
     function conectar() {
         client.connect({
-            userName: USER, password: PASS, useSSL: true,
-            onSuccess: () => {
-                document.getElementById('mqtt-status').innerText = "MQTT: CONECTADO";
-                document.getElementById('mqtt-status').style.color = "var(--pump-on)";
-                client.subscribe(TOPICO_BASE + "#");
+            userName: "ebcandido", password: "Elson@2015", useSSL: true,
+            onSuccess: () => { 
+                isMqttConnected = true;
+                client.subscribe(TOPICO + "#"); 
+            },
+            onFailure: () => {
+                isMqttConnected = false;
+                setTimeout(conectar, 5000);
             }
         });
     }
 
-    // LÓGICA DE PROCESSAMENTO ORIGINAL
-    function processarDados(tag, valor) {
-        const ativo = (valor === "1");
-        
-        switch(tag) {
-            case "bomba_radial": atualizarBomba('bvr', ativo, ['f-vacuo']); break;
-            case "bomba_helicoidal": atualizarBomba('bc1', ativo, ['f-bc1-in', 'f-bc1-out']); break;
-            case "bomba_centrifuga": atualizarBomba('bc2', ativo, ['f-bc2-in', 'f-bc2-out', 'f-sao-in', 'f-sao-agua']); break;
-            
-            case "nivel_alto": 
-                document.getElementById('lvl-vacuo').style.height = ativo ? "85%" : "25%";
-                document.getElementById('alm-v-alto').classList.toggle('alarm-active', ativo);
-                break;
-            
-            case "nivel_alto_res": 
-                document.getElementById('lvl-agua').style.height = ativo ? "85%" : "25%";
-                document.getElementById('alm-r-alto').classList.toggle('alarm-active', ativo);
-                break;
-
-            case "nivel_emerg": 
-                document.getElementById('alm-v-emerg').classList.toggle('alarm-active', ativo);
-                document.getElementById('alm-v-emerg').classList.toggle('alarm-crit', ativo);
-                document.getElementById('tank-tk01').classList.toggle('tank-emerg', ativo);
-                break;
-
-            case "nivel_emerg_res": 
-                document.getElementById('alm-r-emerg').classList.toggle('alarm-active', ativo);
-                document.getElementById('alm-r-emerg').classList.toggle('alarm-crit', ativo);
-                document.getElementById('tank-tk02').classList.toggle('tank-emerg', ativo);
-                break;
-
-            case "oleo_cheio": 
-                document.getElementById('dev-oleo').style.background = ativo ? "var(--pump-off)" : "var(--panel)";
-                document.getElementById('alm-oleo').classList.toggle('alarm-active', ativo);
-                break;
-
-            case "energia":
-                document.getElementById('alm-energia').classList.toggle('alarm-active', ativo);
-                document.getElementById('alm-energia').classList.toggle('alarm-crit', ativo);
-                break;
-
-            case "sistema": 
-                const badge = document.getElementById('status-badge');
-                badge.innerText = ativo ? "EM OPERAÇÃO" : "STANDBY";
-                badge.style.background = ativo ? "var(--pump-on)" : "#30363d";
-                break;
-
-            case "alarme": 
-                document.getElementById('alm-critico').classList.toggle('alarm-active', ativo); 
-                break;
+    function resetarHorimetrosComSenha() {
+        if (prompt("Senha admin:") === "admin123") {
+            pumpTimes = { bvr: 0, bc1: 0, bc2: 0, falha: 0 };
+            localStorage.setItem('mpe_horimetro_v4', JSON.stringify(pumpTimes));
+            updateUIStats();
         }
     }
 
-    function atualizarBomba(id, ligar, fluxos) {
-        const dev = document.getElementById(`dev-${id}`);
-        if(!dev) return;
-        if(ligar) {
-            dev.classList.replace('off', 'on');
-            fluxos.forEach(f => {
-                const el = document.getElementById(f);
-                if(el) el.style.display = 'block';
-            });
-        } else {
-            dev.classList.replace('on', 'off');
-            fluxos.forEach(f => {
-                const el = document.getElementById(f);
-                if(el) el.style.display = 'none';
-            });
-        }
-    }
-
-    function enviarComando(cmd, val) {
-        const message = new Paho.MQTT.Message(val);
-        message.destinationName = TOPICO_BASE + "comando/" + cmd;
-        client.send(message);
-    }
-
-    // AUTO SCALE PARA MOBILE
-    function autoScale() {
-        const canvas = document.getElementById('main-canvas');
-        const wrapper = document.querySelector('.scada-wrapper');
-        const availableWidth = wrapper.offsetWidth;
-        
-        if (availableWidth < 1100) {
-            const scale = (availableWidth - 20) / 1100;
-            canvas.style.transform = `scale(${scale})`;
-            canvas.style.transformOrigin = 'top left';
-            wrapper.style.height = (550 * scale + 20) + 'px';
-        } else {
-            canvas.style.transform = `none`;
-            wrapper.style.height = '570px';
-        }
-    }
-
-    window.addEventListener('resize', autoScale);
-    window.addEventListener('load', () => {
-        conectar();
-        autoScale();
-        triggerMachineOffline();
-    });
+    window.onload = () => { conectar(); carregarDB(); updateUIStats(); };
 </script>
 </body>
 </html>
