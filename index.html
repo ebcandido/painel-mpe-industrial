@@ -83,11 +83,6 @@
         .card-full { grid-column: 1 / -1; }
         .card small { color: var(--accent); font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 15px; font-size: 10px; }
 
-        .btn-group { display: flex; gap: 10px; width: 100%; }
-        .btn { flex: 1; padding: 15px; border: none; border-radius: 8px; font-weight: bold; color: white; cursor: pointer; font-size: 14px; }
-        .btn-on { background: var(--pump-on); }
-        .btn-off { background: var(--pump-off); }
-        
         .history-container {
             max-height: 400px; overflow-x: auto; overflow-y: auto;
             border: 1px solid var(--panel-border); border-radius: 8px; background: #0d1117;
@@ -116,10 +111,10 @@
         .alarm-item { display: flex; align-items: center; padding: 8px; margin-bottom: 5px; background: #0d1117; border-radius: 6px; border-left: 4px solid #30363d; font-size: 11px; }
         .alarm-active { border-left-color: var(--pump-off); color: #ff7b72; font-weight: bold; animation: blink 1s infinite; }
 
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-        .stat-box { background: #0d1117; padding: 15px 5px; border-radius: 10px; border: 1px solid var(--panel-border); text-align: center; }
-        .stat-val { display: block; font-size: 20px; font-family: 'Courier New', monospace; font-weight: bold; color: #ffffff; }
-        .stat-label { font-size: 10px; color: var(--accent); text-transform: uppercase; margin-top: 5px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 15px; }
+        .stat-box { background: #0d1117; padding: 12px 5px; border-radius: 10px; border: 1px solid var(--panel-border); text-align: center; }
+        .stat-val { display: block; font-size: 18px; font-family: 'Courier New', monospace; font-weight: bold; color: #ffffff; }
+        .stat-label { font-size: 9px; color: var(--accent); text-transform: uppercase; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -164,15 +159,21 @@
 </div>
 
 <div class="main-container">
-    <div class="card">
-        <small>Alertas e Comandos</small>
-        <div class="btn-group">
-            <button class="btn btn-on" onclick="enviarComando('start', '1')">START</button>
-            <button class="btn btn-off" onclick="enviarComando('reset', '1')">RESET</button>
-        </div>
-        <div id="status-badge" style="padding:12px; border-radius:8px; font-weight:bold; margin-top:15px; text-align:center; background:#30363d; font-size: 13px;">AGUARDANDO...</div>
+    <!-- Bloco Unificado: Alertas, Status e Acumuladores Relógio -->
+    <div class="card card-full">
+        <small>Painel Unificado de Alertas e Acumuladores (Imunizado contra congelamento)</small>
         
-        <div style="margin-top:20px; display: grid; gap: 5px;">
+        <!-- Seção dos Horímetros Integrada -->
+        <div class="stats-grid">
+            <div class="stat-box"><span id="time-sistema" class="stat-val" style="color: var(--pump-on)">00:00:00</span><span class="stat-label">Sistema Operando</span></div>
+            <div class="stat-box"><span id="time-standby" class="stat-val">00:00:00</span><span class="stat-label">Sistema Standby</span></div>
+            <div class="stat-box"><span id="time-falha" class="stat-val" style="color: var(--pump-off)">00:00:00</span><span class="stat-label" style="color: var(--pump-off)">Falhas Coletivas</span></div>
+        </div>
+
+        <div id="status-badge" style="padding:12px; border-radius:8px; font-weight:bold; text-align:center; background:#30363d; font-size: 13px; margin-bottom: 15px;">AGUARDANDO...</div>
+        
+        <!-- Lista de Alertas -->
+        <div style="display: grid; gap: 5px;">
             <div id="alm-critico" class="alarm-item">⚠ FALHA CRÍTICA</div>
             <div id="alm-v-alto" class="alarm-item">⚠ NÍVEL ALTO TK-01</div>
             <div id="alm-r-alto" class="alarm-item">⚠ NÍVEL ALTO TK-02</div>
@@ -183,17 +184,9 @@
         </div>
     </div>
 
-    <div class="card" style="display: flex; flex-direction: column; justify-content: center;">
-        <small>Acumuladores do Sistema (Imunizado contra congelamento)</small>
-        <div class="stats-grid">
-            <div class="stat-box"><span id="time-sistema" class="stat-val" style="color: var(--pump-on)">00:00:00</span><span class="stat-label">Sistema Operando</span></div>
-            <div class="stat-box"><span id="time-standby" class="stat-val">00:00:00</span><span class="stat-label">Sistema Standby</span></div>
-            <div class="stat-box"><span id="time-falha" class="stat-val" style="color: var(--pump-off)">00:00:00</span><span class="stat-label" style="color: var(--pump-off)">Falhas Coletivas</span></div>
-        </div>
-    </div>
-
+    <!-- Bloco do Histórico Técnico Supabase (Filtrado estritamente para os 10 últimos) -->
     <div class="card card-full">
-        <small>Histórico Técnico Supabase</small>
+        <small>Histórico Técnico Supabase (Últimos 10 Eventos)</small>
         <div class="history-container">
             <table class="history-table">
                 <thead>
@@ -220,16 +213,12 @@
     const TOPICO = "planta/mpe/";
     const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "MPE_VIEW_" + Math.random().toString(16).slice(2, 6));
 
-    // Valores estáticos vindos do banco
     let baseTimes = { sistema: 0, standby: 0, falha: 0 };
-    // Valores acumulados reais mostrados na tela
     let displayTimes = { sistema: 0, standby: 0, falha: 0 };
     
     let states = { sistema: false, alarme: false, ping: null };
     let lastPing = null;
     let isMqttConnected = false;
-
-    // Timestamps para cálculo exato e imune a congelamento de abas
     let lastTimeChecked = Date.now();
 
     const formatSeconds = (s) => {
@@ -237,7 +226,6 @@
         return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(rs).padStart(2,'0')}`;
     };
 
-    // Loop delta-time: Calcula a variação exata do tempo real do PC
     setInterval(() => {
         const now = Date.now();
         const deltaSeconds = (now - lastTimeChecked) / 1000;
@@ -261,7 +249,6 @@
                 statusEl.innerText = "MQTT: CONECTADO | STATUS: ONLINE";
                 statusEl.style.color = "var(--pump-on)";
                 
-                // Soma usando frações de tempo real baseadas no relógio interno do PC
                 if(states.alarme) {
                     baseTimes.falha += deltaSeconds;
                 } else if(states.sistema) {
@@ -270,7 +257,6 @@
                     baseTimes.standby += deltaSeconds;
                 }
                 
-                // Arredonda para exibição limpa na tela
                 displayTimes.sistema = Math.floor(baseTimes.sistema);
                 displayTimes.standby = Math.floor(baseTimes.standby);
                 displayTimes.falha = Math.floor(baseTimes.falha);
@@ -296,7 +282,8 @@
 
     async function carregarDB() {
         try {
-            const { data } = await _supa.from('historico_eventos').select('*').order('created_at', { ascending: false }).limit(15);
+            // CORREÇÃO: limitando estritamente a busca aos 10 eventos mais recentes do banco de dados
+            const { data } = await _supa.from('historico_eventos').select('*').order('created_at', { ascending: false }).limit(10);
             if (data) {
                 document.getElementById('tabela-corpo').innerHTML = data.map(row => `
                     <tr>
@@ -323,7 +310,7 @@
                     }
                 }
             }
-            lastTimeChecked = Date.now(); // Reseta a referência temporal inicial
+            lastTimeChecked = Date.now();
             displayTimes.sistema = Math.floor(baseTimes.sistema);
             displayTimes.standby = Math.floor(baseTimes.standby);
             displayTimes.falha = Math.floor(baseTimes.falha);
@@ -369,13 +356,6 @@
         const d = document.getElementById(`dev-${id}`);
         if(d) d.className = `device pump ${status ? 'on' : 'off'}`;
         fluxos.forEach(f => { const e = document.getElementById(f); if(e) e.style.display = status ? 'block' : 'none'; });
-    }
-
-    function enviarComando(c, v) {
-        if (!isMqttConnected) return;
-        const m = new Paho.MQTT.Message(v);
-        m.destinationName = TOPICO + "comando/" + c;
-        client.send(m);
     }
 
     window.onload = async () => { 
