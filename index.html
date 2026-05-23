@@ -36,7 +36,7 @@
         }
 
         #overlay-link {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.9); z-index: 9999; flex-direction: column;
             justify-content: center; align-items: center; text-align: center;
             padding: 20px;
@@ -97,7 +97,7 @@
         .device { position: absolute; background: var(--panel); border: 2px solid #444; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; font-size: 11px; font-weight: bold; }
         .pump { width: 60px; height: 60px; border-radius: 50%; }
         .pump.on { border-color: var(--pump-on); box-shadow: 0 0 20px var(--pump-on); background: #1b4332; color: #fff; }
-        .pump.off { border-color: var(--pump-off); }
+        .pump.off { border-color: var(--pump-off); background: var(--panel); color: var(--text-main); box-shadow: none; }
         .tank { width: 90px; height: 130px; border-radius: 6px; overflow: hidden; }
         .silo { border-bottom-left-radius: 30px; border-bottom-right-radius: 30px; }
         .level { position: absolute; bottom: 0; width: 100%; background: linear-gradient(to top, var(--water), #58a6ff); height: 20%; transition: height 1s; border-top: 2px solid #fff; z-index: -1; opacity: 0.8; }
@@ -121,13 +121,13 @@
 
 <div id="overlay-link">
     <div class="overlay-box">
-        <div class="blink-text">ERRO DE CONEXÃO</div>
-        <p>Aguardando resposta do link com o hardware para evitar contagens incorretas...</p>
+        <div class="blink-text">CONECTANDO AO SISTEMA</div>
+        <p id="overlay-msg">Aguardando confirmação de ping do hardware para sincronização segura...</p>
     </div>
 </div>
 
 <div class="header">
-    <h2>SISTEMA MPE INDUSTRIAL v7.5 - VISUALIZADOR IMUNIZADO</h2>
+    <h2>SISTEMA MPE INDUSTRIAL v7.6 - CONFIRMAÇÃO POR PING</h2>
     <div id="mqtt-status" style="font-size: 11px; color:var(--pump-off); font-weight: bold; margin-top: 5px;">MQTT: INICIALIZANDO...</div>
 </div>
 
@@ -159,20 +159,17 @@
 </div>
 
 <div class="main-container">
-    <!-- Bloco Unificado: Alertas, Status e Acumuladores Relógio -->
     <div class="card card-full">
-        <small>Painel Unificado de Alertas e Acumuladores (Imunizado contra congelamento)</small>
+        <small>Painel Unificado de Alertas e Acumuladores (Trava por Ping)</small>
         
-        <!-- Seção dos Horímetros Integrada -->
         <div class="stats-grid">
             <div class="stat-box"><span id="time-sistema" class="stat-val" style="color: var(--pump-on)">00:00:00</span><span class="stat-label">Sistema Operando</span></div>
             <div class="stat-box"><span id="time-standby" class="stat-val">00:00:00</span><span class="stat-label">Sistema Standby</span></div>
             <div class="stat-box"><span id="time-falha" class="stat-val" style="color: var(--pump-off)">00:00:00</span><span class="stat-label" style="color: var(--pump-off)">Falhas Coletivas</span></div>
         </div>
 
-        <div id="status-badge" style="padding:12px; border-radius:8px; font-weight:bold; text-align:center; background:#30363d; font-size: 13px; margin-bottom: 15px;">AGUARDANDO...</div>
+        <div id="status-badge" style="padding:12px; border-radius:8px; font-weight:bold; text-align:center; background:#30363d; font-size: 13px; margin-bottom: 15px;">AGUARDANDO CONFIRMAÇÃO DE PING...</div>
         
-        <!-- Lista de Alertas -->
         <div style="display: grid; gap: 5px;">
             <div id="alm-critico" class="alarm-item">⚠ FALHA CRÍTICA</div>
             <div id="alm-v-alto" class="alarm-item">⚠ NÍVEL ALTO TK-01</div>
@@ -184,7 +181,6 @@
         </div>
     </div>
 
-    <!-- Bloco do Histórico Técnico Supabase (Filtrado estritamente para os 10 últimos) -->
     <div class="card card-full">
         <small>Histórico Técnico Supabase (Últimos 10 Eventos)</small>
         <div class="history-container">
@@ -219,6 +215,7 @@
     let states = { sistema: false, alarme: false, ping: null };
     let lastPing = null;
     let isMqttConnected = false;
+    let hasReceivedFirstPing = false; 
     let lastTimeChecked = Date.now();
 
     const formatSeconds = (s) => {
@@ -226,44 +223,77 @@
         return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(rs).padStart(2,'0')}`;
     };
 
+    function resetarVisualSinoptico() {
+        toggleBomba('bvr', false, ['f-vacuo', 'f-succao']);
+        toggleBomba('bc1', false, ['f-bc1-in', 'f-bc1-out']);
+        toggleBomba('bc2', false, ['f-bc2-in', 'f-bc2-out', 'f-sao-in', 'f-sao-agua', 'f-filter-out']);
+        document.getElementById('lvl-vacuo').style.height = "20%";
+        document.getElementById('lvl-agua').style.height = "20%";
+        document.getElementById('main-canvas').classList.remove('emerg-active');
+        document.getElementById('tank-tk01').classList.remove('emerg-active');
+        document.getElementById('tank-tk02').classList.remove('emerg-active');
+        document.getElementById('dev-oleo').classList.remove('emerg-active');
+        
+        const alarmes = ['alm-critico', 'alm-v-alto', 'alm-r-alto', 'alm-oleo', 'alm-v-emerg', 'alm-r-emerg', 'alm-energia'];
+        alarmes.forEach(id => document.getElementById(id).classList.remove('alarm-active'));
+        
+        const s = document.getElementById('status-badge');
+        s.innerText = "LINK FORA - DADOS CONGELADOS";
+        s.style.background = "#30363d";
+    }
+
     setInterval(() => {
         const now = Date.now();
         const deltaSeconds = (now - lastTimeChecked) / 1000;
         lastTimeChecked = now;
 
         const statusEl = document.getElementById('mqtt-status');
+        
         if (!isMqttConnected) {
             statusEl.innerText = "MQTT: DESCONECTADO";
             statusEl.style.color = "var(--pump-off)";
-        } else if (lastPing === null) {
-            statusEl.innerText = "MQTT: CONECTADO | AGUARDANDO HARDWARE...";
-            statusEl.style.color = "var(--accent)";
-        } else {
-            const diff = (now - lastPing) / 1000;
-            if (diff > 65) {
-                document.getElementById('overlay-link').style.display = 'flex';
-                statusEl.innerText = `MQTT: CONECTADO | STATUS: OFFLINE`;
-                statusEl.style.color = "var(--pump-off)";
-            } else {
-                document.getElementById('overlay-link').style.display = 'none';
-                statusEl.innerText = "MQTT: CONECTADO | STATUS: ONLINE";
-                statusEl.style.color = "var(--pump-on)";
-                
-                if(states.alarme) {
-                    baseTimes.falha += deltaSeconds;
-                } else if(states.sistema) {
-                    baseTimes.sistema += deltaSeconds;
-                } else {
-                    baseTimes.standby += deltaSeconds;
-                }
-                
-                displayTimes.sistema = Math.floor(baseTimes.sistema);
-                displayTimes.standby = Math.floor(baseTimes.standby);
-                displayTimes.falha = Math.floor(baseTimes.falha);
-
-                updateUIStats();
-            }
+            document.getElementById('overlay-msg').innerText = "Sem conexão com o servidor MQTT. Reconectando...";
+            document.getElementById('overlay-link').style.display = 'flex';
+            if(hasReceivedFirstPing) { hasReceivedFirstPing = false; resetarVisualSinoptico(); }
+            return;
         }
+
+        if (!hasReceivedFirstPing) {
+            document.getElementById('overlay-link').style.display = 'flex';
+            document.getElementById('overlay-msg').innerText = "Aguardando confirmação de ping físico do hardware...";
+            statusEl.innerText = "MQTT: CONECTADO | AGUARDANDO REFRESH REAL...";
+            statusEl.style.color = "var(--accent)";
+            return;
+        }
+
+        const diff = (now - lastPing) / 1000;
+        if (diff > 65) {
+            document.getElementById('overlay-link').style.display = 'flex';
+            document.getElementById('overlay-msg').innerText = "Link com o hardware interrompido por mais de 65s. Evitando contagens fantasmas...";
+            statusEl.innerText = `MQTT: CONECTADO | STATUS: OFFLINE`;
+            statusEl.style.color = "var(--pump-off)";
+            resetarVisualSinoptico();
+            return;
+        }
+
+        document.getElementById('overlay-link').style.none = 'none'; // Correção sutil de sintaxe original do estilo
+        document.getElementById('overlay-link').style.display = 'none';
+        statusEl.innerText = "MQTT: CONECTADO | STATUS: ONLINE";
+        statusEl.style.color = "var(--pump-on)";
+        
+        if(states.alarme) {
+            baseTimes.falha += deltaSeconds;
+        } else if(states.sistema) {
+            baseTimes.sistema += deltaSeconds;
+        } else {
+            baseTimes.standby += deltaSeconds;
+        }
+        
+        displayTimes.sistema = Math.floor(baseTimes.sistema);
+        displayTimes.standby = Math.floor(baseTimes.standby);
+        displayTimes.falha = Math.floor(baseTimes.falha);
+
+        updateUIStats();
     }, 1000);
 
     function updateUIStats() {
@@ -282,7 +312,6 @@
 
     async function carregarDB() {
         try {
-            // CORREÇÃO: limitando estritamente a busca aos 10 eventos mais recentes do banco de dados
             const { data } = await _supa.from('historico_eventos').select('*').order('created_at', { ascending: false }).limit(10);
             if (data) {
                 document.getElementById('tabela-corpo').innerHTML = data.map(row => `
@@ -300,8 +329,16 @@
         try {
             const tags = ["sistema", "alarme"];
             for (let tag of tags) {
-                const { data } = await _supa.from('historico_eventos').select('descricao').eq('tag', tag).ilike('descricao', '%Duração:%').order('created_at', { ascending: false }).limit(1);
+                // Filtro flexível para aceitar tanto a string clássica de Duração quanto o Backup Periódico
+                const { data } = await _supa.from('historico_eventos')
+                    .select('descricao')
+                    .eq('tag', tag)
+                    .or('descricao.ilike.%Duração:%,descricao.ilike.%BACKUP PERIÓDICO%')
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
                 if (data && data.length > 0) {
+                    // Regex genérico para capturar o formato de tempo HH:MM:SS de qualquer parte do texto
                     const match = data[0].descricao.match(/(\d{2}):(\d{2}):(\d{2})/);
                     if (match) {
                         const sec = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]);
@@ -326,13 +363,26 @@
         });
     }
 
-    client.onConnectionLost = () => { isMqttConnected = false; setTimeout(conectar, 5000); };
+    client.onConnectionLost = () => { 
+        isMqttConnected = false; 
+        hasReceivedFirstPing = false;
+        resetarVisualSinoptico();
+        setTimeout(conectar, 5000); 
+    };
+
     client.onMessageArrived = (msg) => {
-        lastPing = Date.now();
         const tag = msg.destinationName.replace(TOPICO, "");
         const val = msg.payloadString;
-        processarVisual(tag, val);
-        salvarNoBanco(tag, val);
+
+        if (tag === "ping") {
+            lastPing = Date.now();
+            hasReceivedFirstPing = true;
+        }
+
+        if (hasReceivedFirstPing) {
+            processarVisual(tag, val);
+            salvarNoBanco(tag, val);
+        }
     };
 
     function processarVisual(tag, val) {
