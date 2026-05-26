@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MPE Industrial - Monitoramento Passivo</title>
+    <title>MPE Industrial - v7.5 Passivo Monitor</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -82,7 +82,7 @@
         .card { background: var(--panel); padding: 18px; border-radius: 12px; border: 1px solid var(--panel-border); }
         .card-full { grid-column: 1 / -1; }
         .card small { color: var(--accent); font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 15px; font-size: 10px; }
-
+        
         .history-container {
             max-height: 400px; overflow-x: auto; overflow-y: auto;
             border: 1px solid var(--panel-border); border-radius: 8px; background: #0d1117;
@@ -111,12 +111,10 @@
         .alarm-item { display: flex; align-items: center; padding: 8px; margin-bottom: 5px; background: #0d1117; border-radius: 6px; border-left: 4px solid #30363d; font-size: 11px; }
         .alarm-active { border-left-color: var(--pump-off); color: #ff7b72; font-weight: bold; animation: blink 1s infinite; }
 
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 15px; }
         .stat-box { background: #0d1117; padding: 15px 5px; border-radius: 10px; border: 1px solid var(--panel-border); text-align: center; }
         .stat-val { display: block; font-size: 20px; font-family: 'Courier New', monospace; font-weight: bold; color: #ffffff; }
         .stat-label { font-size: 10px; color: var(--accent); text-transform: uppercase; margin-top: 5px; }
-
-        #status-badge { padding:12px; border-radius:8px; font-weight:bold; margin-bottom:20px; text-align:center; background:#30363d; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -124,12 +122,12 @@
 <div id="overlay-link">
     <div class="overlay-box">
         <div class="blink-text">ERRO DE CONEXÃO</div>
-        <p>Aguardando resposta do link com o hardware para evitar contagens incorretas...</p>
+        <p>Aguardando resposta do link com o hardware...</p>
     </div>
 </div>
 
 <div class="header">
-    <h2>SISTEMA MPE INDUSTRIAL v7.5 - MONITOR PASSIVO</h2>
+    <h2>SISTEMA MPE INDUSTRIAL v7.5 - MODO PASSIVO</h2>
     <div id="mqtt-status" style="font-size: 11px; color:var(--pump-off); font-weight: bold; margin-top: 5px;">MQTT: INICIALIZANDO...</div>
 </div>
 
@@ -162,7 +160,7 @@
 
 <div class="main-container">
     <div class="card card-full">
-        <small>Métricas Temporais e Alertas em Tempo Real</small>
+        <small>Telemetria e Diagnóstico Ativo (Apenas Leitura)</small>
         
         <div class="stats-grid">
             <div class="stat-box"><span id="time-sistema" class="stat-val" style="color: var(--pump-on)">00:00:00</span><span class="stat-label">Sistema Operando</span></div>
@@ -170,7 +168,7 @@
             <div class="stat-box"><span id="time-falha" class="stat-val" style="color: var(--pump-off)">00:00:00</span><span class="stat-label" style="color: var(--pump-off)">Falhas Coletivas</span></div>
         </div>
 
-        <div id="status-badge">AGUARDANDO...</div>
+        <div id="status-badge" style="padding:12px; border-radius:8px; font-weight:bold; margin-bottom:15px; text-align:center; background:#30363d; font-size: 13px;">CONECTANDO AO HARDWARE...</div>
         
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px;">
             <div id="alm-critico" class="alarm-item">⚠ FALHA CRÍTICA</div>
@@ -184,7 +182,7 @@
     </div>
 
     <div class="card card-full">
-        <small>Histórico Técnico Supabase</small>
+        <small>Histórico Técnico Supabase (Atualização Passiva)</small>
         <div class="history-container">
             <table class="history-table">
                 <thead>
@@ -210,26 +208,13 @@
     const BROKER = "703f5ff76b174323a13b99c0940fca41.s1.eu.hivemq.cloud";
     const PORT = 8884;
     const TOPICO = "planta/mpe/";
-    const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "MPE_JS_" + Math.random().toString(16).slice(2, 6));
+    const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "MPE_PASSIVE_" + Math.random().toString(16).slice(2, 6));
 
     let pumpTimes = { sistema: 0, standby: 0, falha: 0 };
-    let states = { sistema: false, alarme: false, ping: null };
+    let states = { sistema: false, alarme: false };
     let lastPing = null;
     let isMqttConnected = false;
     let lastTimestamp = Date.now();
-    let tempoAcumuladoParaBanco = 0;
-
-    const mapeamento = {
-        "ping": "Status de Conexão",
-        "sistema": "Sistema Operando",
-        "standby": "Sistema Standby",
-        "alarme": "Descrição de Falhas",
-        "oleo_cheio": "⚠ DESCARTE ÓLEO CHEIO",
-        "nivel_emerg": "⛔ TK-01 EMERGÊNCIA",
-        "nivel_emerg_res": "⛔ TK-02 EMERGÊNCIA",
-        "energia": "⚡ MONITOR DE REDE",
-        "reset_sistema": "RESET DE MANUTENÇÃO"
-    };
 
     const formatSeconds = (s) => {
         let h = Math.floor(s/3600), m = Math.floor((s%3600)/60), rs = Math.floor(s%60);
@@ -244,7 +229,7 @@
                 if(data.standby !== undefined) pumpTimes.standby = data.standby;
                 if(data.falha !== undefined) pumpTimes.falha = data.falha;
                 updateUIStats();
-            }).catch(e => {});
+            }).catch(() => {});
     }
 
     setInterval(() => {
@@ -280,12 +265,6 @@
                     pumpTimes.falha += deltaSec;
                 }
                 updateUIStats();
-
-                tempoAcumuladoParaBanco += deltaSec;
-                if (tempoAcumuladoParaBanco >= 600) {
-                    tempoAcumuladoParaBanco = 0;
-                    executarBackupAutomaticoBanco();
-                }
             }
         }
     }, 1000);
@@ -296,43 +275,7 @@
         document.getElementById('time-falha').innerText = formatSeconds(pumpTimes.falha);
     }
 
-    async function executarBackupAutomaticoBanco() {
-        try {
-            await _supa.from('historico_eventos').insert([
-                { tag: "sistema", valor: states.sistema ? "1" : "0", descricao: "Sistema Operando -> BACKUP PERIÓDICO", horimetro: formatSeconds(pumpTimes.sistema) },
-                { tag: "standby", valor: (!states.sistema && !states.alarme) ? "1" : "0", descricao: "Sistema Standby -> BACKUP PERIÓDICO", horimetro: formatSeconds(pumpTimes.standby) },
-                { tag: "alarme", valor: states.alarme ? "1" : "0", descricao: "Descrição de Falhas -> BACKUP PERIÓDICO", horimetro: formatSeconds(pumpTimes.falha) }
-            ]);
-            carregarDB();
-        } catch(e) { console.error(e); }
-    }
-
-    async function salvarNoBanco(tag, valor, horimetroAtual) {
-        if (tag === "ping") {
-            if (states.ping === valor) return; 
-            states.ping = valor;
-        }
-        const permitidosNoBanco = ["sistema", "standby", "alarme", "oleo_cheio", "nivel_emerg", "nivel_emerg_res", "energia", "ping", "reset_sistema"];
-        if (!permitidosNoBanco.includes(tag)) return;
-
-        let descricaoBase = mapeamento[tag] || tag;
-        let infoAdicional = "";
-        const monitorados = { "sistema": "sistema", "standby": "standby", "alarme": "falha" };
-
-        if (tag === "ping") {
-            const agora = new Date().toLocaleTimeString();
-            infoAdicional = valor === "1" ? ` -> CONEXÃO HARDWARE OK ÀS ${agora}` : ` -> HARDWARE DESCONECTADO`;
-        } else if (monitorados[tag]) {
-            infoAdicional = valor === "1" ? ` -> INÍCIO` : ` -> FIM`;
-        } else { 
-            infoAdicional = valor === "1" ? " -> CRÍTICO / ATIVADO" : " -> NORMALIZADO / OK"; 
-        }
-
-        try {
-            await _supa.from('historico_eventos').insert([{ tag, valor, descricao: descricaoBase + infoAdicional, horimetro: horimetroAtual }]);
-            carregarDB();
-        } catch (e) { console.error(e); }
-    }
+    // 🛑 REMOVIDAS TODAS AS FUNÇÕES DE SALVAMENTO OU INSERÇÃO NO BANCO DE DADOS (ABSOLUTAMENTE PASSIVO)
 
     async function carregarDB() {
         try {
@@ -356,6 +299,7 @@
             onSuccess: () => { 
                 isMqttConnected = true; 
                 client.subscribe("planta/mpe/#"); 
+                carregarDB();
             },
             onFailure: () => { isMqttConnected = false; setTimeout(conectar, 5000); }
         });
@@ -391,9 +335,6 @@
             if (tag === "horimetro/standby") { pumpTimes.standby = parseInt(payloadBruto, 10) || 0; updateUIStats(); return; }
             if (tag === "horimetro/falha") { pumpTimes.falha = parseInt(payloadBruto, 10) || 0; updateUIStats(); return; }
         }
-
-        let hReferencia = horimetroOpcional ? horimetroOpcional : formatSeconds(tag === "alarme" ? pumpTimes.falha : (tag === "standby" ? pumpTimes.standby : pumpTimes.sistema));
-        salvarNoBanco(tag, valPuro, hReferencia);
     };
 
     function converterStringParaSegundos(str) {
@@ -425,7 +366,10 @@
         fluxos.forEach(f => { const e = document.getElementById(f); if(e) e.style.display = status ? 'block' : 'none'; });
     }
 
-    window.onload = () => { conectar(); carregarDB(); lastTimestamp = Date.now(); carregarHorasDoHardware(); };
+    // Intervalo passivo para recarregar os dados do Supabase na tabela a cada 30 segundos
+    setInterval(carregarDB, 3000);
+
+    window.onload = () => { conectar(); lastTimestamp = Date.now(); carregarHorasDoHardware(); };
 </script>
 </body>
 </html>
