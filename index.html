@@ -232,6 +232,51 @@
             }).catch(() => {});
     }
 
+    // ⚡ INICIALIZADOR AUTOMÁTICO: Busca e calcula os horímetros baseando-se no último lançamento válido do banco
+    async function sincronizarHorimetrosPeloBanco() {
+        try {
+            const tagsParaBuscar = ["sistema", "alarme", "standby"];
+            for (let tag de tagsParaBuscar) {
+                // Seleciona o registro mais recente da respectiva tag
+                const { data, error } = await _supa.from('historico_eventos')
+                    .select('horimetro, descricao')
+                    .eq('tag', tag)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (data && data.length > 0) {
+                    let segundosExtraidos = 0;
+                    const registro = data[0];
+
+                    // Verifica se o campo estrito 'horimetro' possui dados preenchidos válidos
+                    if (registro.horimetro && registro.horimetro !== "00:00:00") {
+                        segundosExtraidos = converterStringParaSegundos(registro.horimetro);
+                    } else if (registro.descricao) {
+                        // Varre a string de descrição buscando o formato padrão HH:MM:SS de encerramento ou backup
+                        const correspondencia = registro.descricao.match(/(\d{2}):(\d{2}):(\d{2})/);
+                        if (correspondencia) {
+                            segundosExtraidos = parseInt(correspondencia[1], 10) * 3600 + 
+                                                 parseInt(correspondencia[2], 10) * 60 + 
+                                                 parseInt(correspondencia[3], 10);
+                        }
+                    }
+
+                    // Se encontrou dados cronológicos antigos, injeta na memória RAM do painel passivo
+                    if (segundosExtraidos > 0) {
+                        if (tag === "sistema") pumpTimes.sistema = segundosExtraidos;
+                        if (tag === "alarme") pumpTimes.falha = segundosExtraidos;
+                        if (tag === "standby") pumpTimes.standby = segundosExtraidos;
+                    }
+                }
+            }
+            lastTimestamp = Date.now();
+            updateUIStats();
+            console.log("Horímetros sincronizados com sucesso a partir dos históricos da nuvem!");
+        } catch (err) {
+            console.error("Falha ao puxar acumuladores do Supabase: ", err);
+        }
+    }
+
     setInterval(() => {
         const agora = Date.now();
         const deltaSec = (agora - lastTimestamp) / 1000;
@@ -274,8 +319,6 @@
         document.getElementById('time-standby').innerText = formatSeconds(pumpTimes.standby);
         document.getElementById('time-falha').innerText = formatSeconds(pumpTimes.falha);
     }
-
-    // 🛑 REMOVIDAS TODAS AS FUNÇÕES DE SALVAMENTO OU INSERÇÃO NO BANCO DE DADOS (ABSOLUTAMENTE PASSIVO)
 
     async function carregarDB() {
         try {
@@ -366,10 +409,16 @@
         fluxos.forEach(f => { const e = document.getElementById(f); if(e) e.style.display = status ? 'block' : 'none'; });
     }
 
-    // Intervalo passivo para recarregar os dados do Supabase na tabela a cada 30 segundos
-    setInterval(carregarDB, 3000);
+    // Atualização recorrente apenas da tabela do histórico de auditoria
+    setInterval(carregarDB, 5000);
 
-    window.onload = () => { conectar(); lastTimestamp = Date.now(); carregarHorasDoHardware(); };
+    // Inicialização da página passiva realizando a varredura primária do banco para carregar as horas certas
+    window.onload = async () => { 
+        conectar(); 
+        lastTimestamp = Date.now(); 
+        await sincronizarHorimetrosPeloBanco(); 
+        carregarHorasDoHardware(); 
+    };
 </script>
 </body>
 </html>
