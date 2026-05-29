@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MPE Industrial - v7.5 Passivo Monitor</title>
+    <title>MPE Industrial - Supervisório Passivo</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -82,7 +82,7 @@
         .card { background: var(--panel); padding: 18px; border-radius: 12px; border: 1px solid var(--panel-border); }
         .card-full { grid-column: 1 / -1; }
         .card small { color: var(--accent); font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 15px; font-size: 10px; }
-        
+
         .history-container {
             max-height: 400px; overflow-x: auto; overflow-y: auto;
             border: 1px solid var(--panel-border); border-radius: 8px; background: #0d1117;
@@ -111,7 +111,7 @@
         .alarm-item { display: flex; align-items: center; padding: 8px; margin-bottom: 5px; background: #0d1117; border-radius: 6px; border-left: 4px solid #30363d; font-size: 11px; }
         .alarm-active { border-left-color: var(--pump-off); color: #ff7b72; font-weight: bold; animation: blink 1s infinite; }
 
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 15px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
         .stat-box { background: #0d1117; padding: 15px 5px; border-radius: 10px; border: 1px solid var(--panel-border); text-align: center; }
         .stat-val { display: block; font-size: 20px; font-family: 'Courier New', monospace; font-weight: bold; color: #ffffff; }
         .stat-label { font-size: 10px; color: var(--accent); text-transform: uppercase; margin-top: 5px; }
@@ -122,12 +122,12 @@
 <div id="overlay-link">
     <div class="overlay-box">
         <div class="blink-text">ERRO DE CONEXÃO</div>
-        <p>Aguardando resposta do link com o hardware...</p>
+        <p>Aguardando resposta do link com o hardware para evitar contagens incorretas...</p>
     </div>
 </div>
 
 <div class="header">
-    <h2>SISTEMA MPE INDUSTRIAL v7.5 - MODO PASSIVO</h2>
+    <h2>MONITORAMENTO MPE INDUSTRIAL v7.6 (PASSIVO)</h2>
     <div id="mqtt-status" style="font-size: 11px; color:var(--pump-off); font-weight: bold; margin-top: 5px;">MQTT: INICIALIZANDO...</div>
 </div>
 
@@ -159,18 +159,11 @@
 </div>
 
 <div class="main-container">
-    <div class="card card-full">
-        <small>Telemetria e Diagnóstico Ativo (Apenas Leitura)</small>
+    <div class="card">
+        <small>Alertas do Sistema</small>
+        <div id="status-badge" style="padding:12px; border-radius:8px; font-weight:bold; text-align:center; background:#30363d; font-size: 13px;">AGUARDANDO...</div>
         
-        <div class="stats-grid">
-            <div class="stat-box"><span id="time-sistema" class="stat-val" style="color: var(--pump-on)">00:00:00</span><span class="stat-label">Sistema Operando</span></div>
-            <div class="stat-box"><span id="time-standby" class="stat-val" style="color: #d29922;">00:00:00</span><span class="stat-label">Sistema Standby</span></div>
-            <div class="stat-box"><span id="time-falha" class="stat-val" style="color: var(--pump-off)">00:00:00</span><span class="stat-label" style="color: var(--pump-off)">Falhas Coletivas</span></div>
-        </div>
-
-        <div id="status-badge" style="padding:12px; border-radius:8px; font-weight:bold; margin-bottom:15px; text-align:center; background:#30363d; font-size: 13px;">CONECTANDO AO HARDWARE...</div>
-        
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px;">
+        <div style="margin-top:15px; display: grid; gap: 5px;">
             <div id="alm-critico" class="alarm-item">⚠ FALHA CRÍTICA</div>
             <div id="alm-v-alto" class="alarm-item">⚠ NÍVEL ALTO TK-01</div>
             <div id="alm-r-alto" class="alarm-item">⚠ NÍVEL ALTO TK-02</div>
@@ -181,8 +174,20 @@
         </div>
     </div>
 
+    <div class="card">
+        <small>Acumuladores (Tempo Real)</small>
+        <div class="stats-grid">
+            <div class="stat-box"><span id="time-sistema" class="stat-val" style="color: var(--pump-on)">00:00:00</span><span class="stat-label">Sistema Operando</span></div>
+            <div class="stat-box"><span id="time-standby" class="stat-val">00:00:00</span><span class="stat-label">Sistema Standby</span></div>
+            <div class="stat-box"><span id="time-falha" class="stat-val" style="color: var(--pump-off)">00:00:00</span><span class="stat-label" style="color: var(--pump-off)">Falhas Coletivas</span></div>
+        </div>
+        <div style="margin-top: 20px; font-size: 11px; text-align: center; color: var(--gas)">
+            Modo de Monitoramento Passivo. Alterações de parâmetros bloqueadas nesta estação.
+        </div>
+    </div>
+
     <div class="card card-full">
-        <small>Histórico Técnico Supabase (Atualização Passiva)</small>
+        <small>Histórico Técnico Supabase</small>
         <div class="history-container">
             <table class="history-table">
                 <thead>
@@ -208,13 +213,12 @@
     const BROKER = "703f5ff76b174323a13b99c0940fca41.s1.eu.hivemq.cloud";
     const PORT = 8884;
     const TOPICO = "planta/mpe/";
-    const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "MPE_PASSIVE_" + Math.random().toString(16).slice(2, 6));
+    const client = new Paho.MQTT.Client(`wss://${BROKER}:${PORT}/mqtt`, "MPE_JS_PASSIVE_" + Math.random().toString(16).slice(2, 6));
 
     let pumpTimes = { sistema: 0, standby: 0, falha: 0 };
-    let states = { sistema: false, alarme: false };
+    let states = { sistema: false, alarme: false, ping: null };
     let lastPing = null;
     let isMqttConnected = false;
-    let lastTimestamp = Date.now();
 
     const formatSeconds = (s) => {
         let h = Math.floor(s/3600), m = Math.floor((s%3600)/60), rs = Math.floor(s%60);
@@ -225,64 +229,18 @@
         fetch('/get_horimetros')
             .then(res => res.json())
             .then(data => {
-                if(data.sistema !== undefined) pumpTimes.sistema = data.sistema;
-                if(data.standby !== undefined) pumpTimes.standby = data.standby;
-                if(data.falha !== undefined) pumpTimes.falha = data.falha;
+                pumpTimes.sistema = data.sistema;
+                pumpTimes.standby = data.standby;
+                pumpTimes.falha = data.falha;
                 updateUIStats();
-            }).catch(() => {});
+            }).catch(e => console.log("Buscando dados via hardware local..."));
     }
 
-    // ⚡ INICIALIZADOR AUTOMÁTICO: Busca e calcula os horímetros baseando-se no último lançamento válido do banco
-    async function sincronizarHorimetrosPeloBanco() {
-        try {
-            const tagsParaBuscar = ["sistema", "alarme", "standby"];
-            for (let tag de tagsParaBuscar) {
-                // Seleciona o registro mais recente da respectiva tag
-                const { data, error } = await _supa.from('historico_eventos')
-                    .select('horimetro, descricao')
-                    .eq('tag', tag)
-                    .order('created_at', { ascending: false })
-                    .limit(1);
-
-                if (data && data.length > 0) {
-                    let segundosExtraidos = 0;
-                    const registro = data[0];
-
-                    // Verifica se o campo estrito 'horimetro' possui dados preenchidos válidos
-                    if (registro.horimetro && registro.horimetro !== "00:00:00") {
-                        segundosExtraidos = converterStringParaSegundos(registro.horimetro);
-                    } else if (registro.descricao) {
-                        // Varre a string de descrição buscando o formato padrão HH:MM:SS de encerramento ou backup
-                        const correspondencia = registro.descricao.match(/(\d{2}):(\d{2}):(\d{2})/);
-                        if (correspondencia) {
-                            segundosExtraidos = parseInt(correspondencia[1], 10) * 3600 + 
-                                                 parseInt(correspondencia[2], 10) * 60 + 
-                                                 parseInt(correspondencia[3], 10);
-                        }
-                    }
-
-                    // Se encontrou dados cronológicos antigos, injeta na memória RAM do painel passivo
-                    if (segundosExtraidos > 0) {
-                        if (tag === "sistema") pumpTimes.sistema = segundosExtraidos;
-                        if (tag === "alarme") pumpTimes.falha = segundosExtraidos;
-                        if (tag === "standby") pumpTimes.standby = segundosExtraidos;
-                    }
-                }
-            }
-            lastTimestamp = Date.now();
-            updateUIStats();
-            console.log("Horímetros sincronizados com sucesso a partir dos históricos da nuvem!");
-        } catch (err) {
-            console.error("Falha ao puxar acumuladores do Supabase: ", err);
-        }
-    }
-
+    // Loop do tempo real na tela e monitoramento do link (Apenas visual, sem escrita em DB)
     setInterval(() => {
         const agora = Date.now();
-        const deltaSec = (agora - lastTimestamp) / 1000;
-        lastTimestamp = agora;
-
         const statusEl = document.getElementById('mqtt-status');
+        
         if (!isMqttConnected) {
             statusEl.innerText = "MQTT: DESCONECTADO";
             statusEl.style.color = "var(--pump-off)";
@@ -302,12 +260,13 @@
                 statusEl.innerText = "MQTT: CONECTADO | STATUS: ONLINE";
                 statusEl.style.color = "var(--pump-on)";
                 
-                if (states.sistema && !states.alarme) {
-                    pumpTimes.sistema += deltaSec;
-                } else if (!states.sistema && !states.alarme) {
-                    pumpTimes.standby += deltaSec;
-                } else if (states.alarme) {
-                    pumpTimes.falha += deltaSec;
+                // Incrementa o tempo corrente na tela do usuário dinamicamente
+                if (states.alarme) {
+                    pumpTimes.falha += 1;
+                } else if (states.sistema) {
+                    pumpTimes.sistema += 1;
+                } else {
+                    pumpTimes.standby += 1;
                 }
                 updateUIStats();
             }
@@ -342,7 +301,6 @@
             onSuccess: () => { 
                 isMqttConnected = true; 
                 client.subscribe("planta/mpe/#"); 
-                carregarDB();
             },
             onFailure: () => { isMqttConnected = false; setTimeout(conectar, 5000); }
         });
@@ -368,15 +326,17 @@
 
         processarVisual(tag, valPuro);
 
+        // Atualização instantânea com as bases oficiais de tempo vindas do hardware via MQTT
         if (horimetroOpcional) {
             if (tag === "sistema") pumpTimes.sistema = converterStringParaSegundos(horimetroOpcional);
-            if (tag === "standby") pumpTimes.standby = converterStringParaSegundos(horimetroOpcional);
             if (tag === "alarme") pumpTimes.falha = converterStringParaSegundos(horimetroOpcional);
+            if (tag === "standby") pumpTimes.standby = converterStringParaSegundos(horimetroOpcional);
             updateUIStats();
-        } else {
-            if (tag === "horimetro/sistema") { pumpTimes.sistema = parseInt(payloadBruto, 10) || 0; updateUIStats(); return; }
-            if (tag === "horimetro/standby") { pumpTimes.standby = parseInt(payloadBruto, 10) || 0; updateUIStats(); return; }
-            if (tag === "horimetro/falha") { pumpTimes.falha = parseInt(payloadBruto, 10) || 0; updateUIStats(); return; }
+        }
+        
+        // Atualiza a tabela de logs em tempo real na tela sempre que houver novas movimentações na planta
+        if(tag === "sistema" || tag === "alarme" || tag === "oleo_cheio" || tag === "nivel_emerg" || tag === "nivel_emerg_res" || tag === "energia" || tag === "reset_sistema") {
+            carregarDB();
         }
     };
 
@@ -409,16 +369,7 @@
         fluxos.forEach(f => { const e = document.getElementById(f); if(e) e.style.display = status ? 'block' : 'none'; });
     }
 
-    // Atualização recorrente apenas da tabela do histórico de auditoria
-    setInterval(carregarDB, 5000);
-
-    // Inicialização da página passiva realizando a varredura primária do banco para carregar as horas certas
-    window.onload = async () => { 
-        conectar(); 
-        lastTimestamp = Date.now(); 
-        await sincronizarHorimetrosPeloBanco(); 
-        carregarHorasDoHardware(); 
-    };
+    window.onload = () => { conectar(); carregarDB(); carregarHorasDoHardware(); };
 </script>
 </body>
 </html>
